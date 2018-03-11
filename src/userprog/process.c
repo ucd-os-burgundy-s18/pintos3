@@ -29,19 +29,68 @@ tid_t
 process_execute (const char *file_name) 
 {
   char *fn_copy;
+  char *program_name;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
+
+  program_name = palloc_get_page (0);
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
+  //printf("aaa\n");
 
-  /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  char**  argv=palloc_get_page (0);
+  int argc=0;
+  char* cur_arguement;
+  char* token;
+  char* str1;
+  int j=0;
+  //This first loop checks the number of arguements
+  //so we can push argc to the stack
+  for (j = 0, str1 = fn_copy; ; j++, str1 = NULL) {
+    token = strtok_r(str1, " ", &cur_arguement);
+    if (token == NULL) {
+      argc = j;
+      break;
+    }
+    if(j==0) {
+      strlcpy(program_name, token, PGSIZE);
+    }
+    argv[j]= token;
+  }
+
+  //argc=1;
+  //This second loop allocates
+  /*
+
+
+  /* Create a new thread to execute PROGRAM_NAME. */
+  register int sp asm ("sp");
+  //sp=PHYS_BASE;
+
+  printf("PB: %p\n",PHYS_BASE);
+  //*--sp = argc;
+  asm volatile ("push %k0":"+r"(argc) );
+  for (int k=0; k<argc; ++k) {
+    argv[k];
+    asm volatile ("push %k0":"+r"(argv[k]) );
+    //*--sp = argv[k];
+  }
+  char buffer[1024];
+  hex_dump(sp,buffer,1024, true);
+  tid = thread_create (program_name, PRI_DEFAULT, start_process, fn_copy);
+
+
+
+
   if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+    palloc_free_page (fn_copy);
+    palloc_free_page (program_name);
+
+    palloc_free_page (argv);
   return tid;
 }
 
@@ -438,6 +487,7 @@ setup_stack (void **esp)
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
         *esp = PHYS_BASE;
+        //*esp = PHYS_BASE - 12;
       else
         palloc_free_page (kpage);
     }
