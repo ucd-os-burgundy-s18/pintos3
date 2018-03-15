@@ -29,36 +29,90 @@ tid_t
 process_execute (const char *file_name) 
 {
   char *fn_copy;
+  char *program_name;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
+
+  program_name = palloc_get_page (0);
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
-  /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+
+  char**  argv=palloc_get_page (0);
+  int argc=0;
+  char* cur_arguement;
+  char* token;
+  char* str1;
+  int j=0;
+  //This first loop checks the number of arguements
+  //so we can push argc to the stack
+  for (j = 0, str1 = fn_copy; ; j++, str1 = NULL) {
+    token = strtok_r(str1, " ", &cur_arguement);
+    if (token == NULL) {
+      argc = j;
+      break;
+    }
+    if(j==0) {
+      strlcpy(program_name, token, PGSIZE);
+    }
+    argv[j]= token;
+  }
+  struct arguments* cur_args=palloc_get_page (0);
+  cur_args->argc=argc;
+  cur_args->argv=argv;
+  //argc=1;
+  //This second loop allocates
+  /*
+
+
+  /* Create a new thread to execute PROGRAM_NAME. */
+
+  //sp=PHYS_BASE;
+
+
+  //*--sp = argc;
+ printf("DEBUG: there are %i arguements\n",cur_args->argc);
+ for(int i=0; i<argc; ++i){
+  printf("DEBUG: the current arguement is: '%s'\n",argv[i]);
+ }
+  tid = thread_create (program_name, PRI_DEFAULT, start_process,cur_args);
+
+
+
+
   if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+    palloc_free_page (fn_copy);
+    palloc_free_page (program_name);
+    palloc_free_page(cur_args);
+    palloc_free_page (argv);
   return tid;
 }
 
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *file_name_)
+start_process (void *in_args)
 {
-  char *file_name = file_name_;
+ printf("aaa\n");
+  struct arguments* args=(struct arguments*)in_args;
+
+  //printf("DEBUG: there are %i arguements\n",args->argc);
+  //char *file_name = in_args;
+  char* file_name=args->argv[0];
+ //printf("name '%s'\n",file_name);
   struct intr_frame if_;
   bool success;
-
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
+ char buffer[1024];
+ hex_dump(&if_.esp,buffer,1024, true);
   success = load (file_name, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
@@ -147,6 +201,7 @@ typedef uint16_t Elf32_Half;
 
 /* Executable header.  See [ELF1] 1-4 to 1-8.
    This appears at the very beginning of an ELF binary. */
+
 struct Elf32_Ehdr
   {
     unsigned char e_ident[16];
@@ -438,9 +493,12 @@ setup_stack (void **esp)
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
         *esp = PHYS_BASE;
+        //*esp = PHYS_BASE - 12;
       else
         palloc_free_page (kpage);
     }
+  //char buffer[1024];
+  //hex_dump(,buffer,1024, true);
   return success;
 }
 

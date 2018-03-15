@@ -1,4 +1,5 @@
 build
 bochsrc.txt
 bochsout.txt
-pintos-*-tests.sh
+pintos-*.sh
+.idea
