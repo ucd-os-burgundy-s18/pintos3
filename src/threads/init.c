@@ -201,7 +201,7 @@ read_command_line (void)
   argc = *(uint32_t *) ptov (LOADER_ARG_CNT);
   p = ptov (LOADER_ARGS);
   end = p + LOADER_ARGS_LEN;
-  for (i = 0; i < argc; i++) 
+  for (i = 0; i < argc; i++)
     {
       if (p >= end)
         PANIC ("command line arguments overflow");
