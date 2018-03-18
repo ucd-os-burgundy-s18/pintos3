@@ -75,12 +75,12 @@ process_execute (const char *file_name)
 
 
   //*--sp = argc;
- printf("DEBUG: there are %i arguements\n",cur_args->argc);
+// printf("DEBUG: there are %i arguements\n",cur_args->argc);
  for(int i=0; i<argc; ++i){
-  printf("DEBUG: the current arguement is: '%s'\n",argv[i]);
+  //printf("DEBUG: the current arguement is: '%s'\n",argv[i]);
  }
-  tid = thread_create (program_name, PRI_DEFAULT, start_process,cur_args);
-
+  tid = thread_create (fn_copy, PRI_DEFAULT, start_process,fn_copy);
+  //printf("DEBUG: exited thread create\n");
 
 
 
@@ -97,12 +97,12 @@ process_execute (const char *file_name)
 static void
 start_process (void *in_args)
 {
- printf("aaa\n");
-  struct arguments* args=(struct arguments*)in_args;
+ //printf("aaa\n");
+  //struct arguments* args=(struct arguments*)in_args;
 
   //printf("DEBUG: there are %i arguements\n",args->argc);
-  //char *file_name = in_args;
-  char* file_name=args->argv[0];
+  char *file_name = in_args;
+  //char* file_name=args->argv[0];
  //printf("name '%s'\n",file_name);
   struct intr_frame if_;
   bool success;
@@ -112,7 +112,7 @@ start_process (void *in_args)
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
  char buffer[1024];
- hex_dump(&if_.esp,buffer,1024, true);
+ //hex_dump(PHYS_BASE,buffer,1024, true);
   success = load (file_name, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
@@ -263,6 +263,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
 bool
 load (const char *file_name, void (**eip) (void), void **esp) 
 {
+  printf("loading\n");
   struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
   struct file *file = NULL;
@@ -492,8 +493,8 @@ setup_stack (void **esp)
     {
       success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
       if (success)
-        *esp = PHYS_BASE;
-        //*esp = PHYS_BASE - 12;
+        //*esp = PHYS_BASE;
+        *esp = PHYS_BASE - 12;
       else
         palloc_free_page (kpage);
     }
