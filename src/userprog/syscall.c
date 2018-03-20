@@ -4,34 +4,81 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
-static void syscall_handler (struct intr_frame *);
+#include "userprog/pagedir.h"
+
+static void syscall_handler(struct intr_frame *);
 
 void
-syscall_init (void) 
-{
-  intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+syscall_init(void) {
+ intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
 
 static void
-syscall_handler (struct intr_frame *f UNUSED) 
-{
-  printf ("system call!\n");
-  void*stack_pointer=f->esp;
-  printf("Address is '%p'\n",stack_pointer);
-  printf("PHYS_BASE is '%p'\n",PHYS_BASE);
+syscall_handler(struct intr_frame *f UNUSED) {
+ printf("system call!\n");
+ void *stack_pointer = f->esp;
+ printf("Address is '%p'\n", stack_pointer);
+ printf("PHYS_BASE is '%p'\n", PHYS_BASE);
 
-  char buffer[PGSIZE];
-  if(is_user_vaddr(stack_pointer)){
-    printf("This is in user space\n");
+
+ if (is_user_vaddr(stack_pointer)) {
+  printf("This is in user space\n");
+  printf("Top of page is '%p'\n", pg_round_up(stack_pointer));
+  printf("Bottom of page is '%p'\n", pg_round_down(stack_pointer));
+  //struct thread *t = thread_current ();
+  printf("value at stack pointer is '%i'\n", get_user(stack_pointer));
+  for (int i = -20; i < 20; ++i) {
+   printf("value at stack pointer+'%i' is '%i'\n", i, get_user(stack_pointer + i));
   }
-  //int buffer[PGSIZE];
-  //hex_dump (PHYS_BASE-PGSIZE-1,buffer, PGSIZE, true);
- //for(int i =0; i<250; ++i){
-  //if(get_user((uintptr_t) stack_pointer - (uintptr_t) i)==-1){
-   //print("SEGFAULT\n");
-   //break;
+  writesyscall(stack_pointer);
+  //
+  //for(int i =0; i<250; ++i){
+
+
+  //for(int i=pg_round_down(stack_pointer); i<pg_round_up(stack_pointer); ++i){
+  //if(is_user_vaddr(i)){
+  //break;
+  //printf("char is '%c'\n",get_user(i));
   //}
- // printf("%c",get_user(stack_pointer+i));
+  //char* page=pagedir_get_page(t->pagedir,stack_pointer+i);
+
+
+  //hex_dump (pg_round_down(page),buffer, PGSIZE, true);
+  //int buffer[PGSIZE];
+  //hex_dump (pg_round_down(stack_pointer),buffer, PGSIZE, true);
+ }
+
+ //
+ //for(int i =pg_round_down(stack_pointer)+12; i<stack_pointer; ++i){
+
  //}
- thread_exit ();
+ thread_exit();
+}
+
+int writesyscall(void *sp) {
+ int mode = get_user(sp + 4);
+ int len = get_user(sp + 12);
+ printf("len = %i\n", len);
+ printf("mode = %i\n", mode);
+ printf("buffer address1 = '%p'\n",get_user(sp + 8));
+ printf("buffer address2 = '%p'\n",get_user(sp + 9));
+ printf("buffer address3 = '%p'\n",get_user(sp + 10));
+ printf("buffer address4 = '%p'\n",get_user(sp + 11));
+ printf("bottom of page '%p'\n",pg_round_down(sp));
+ void* page_start=pg_round_down(sp);
+ char* start_of_buffer = page_start+get_user(sp + 8);
+ printf("Buffer start address: '%p'\n", start_of_buffer);
+ char buffer[2048];
+ //hex_dump (page_start,buffer, 2048, true);
+ //printf(get_user(start_of_buffer));
+ /*if (mode == 1) {
+  //for (int i = 0; i < len; ++i) {
+
+    printf("%c", get_user(start_of_buffer+i));
+
+
+  }*/
+
+
+
 }
