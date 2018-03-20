@@ -5,9 +5,9 @@ int
 main (int argc, char **argv)
 {
   //int i;
-  printf("Hello world!\n");
-  //char* buffer="Hello word!";
-  //write (1, 0, 11);
+
+  char* buffer="Hello word!\n";
+  write (1, buffer, 12);
 
   /*for (i = 0; i < argc; i++)
      printf ("%s ", argv[i]);

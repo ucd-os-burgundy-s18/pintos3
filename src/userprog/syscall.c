@@ -69,16 +69,17 @@ int writesyscall(void *sp) {
  char* start_of_buffer = page_start+get_user(sp + 8);
  printf("Buffer start address: '%p'\n", start_of_buffer);
  char buffer[2048];
+ unsigned long buffer_address=get_user(sp + 11);
+ buffer_address=buffer_address*256+get_user(sp + 10);
+ buffer_address=buffer_address*256+get_user(sp + 9);
+ buffer_address=buffer_address*256+get_user(sp + 8);
+ printf("Buffer address is '%p'\n",buffer_address);
+ 
  //hex_dump (page_start,buffer, 2048, true);
  //printf(get_user(start_of_buffer));
- /*if (mode == 1) {
-  //for (int i = 0; i < len; ++i) {
+ if (mode == 1) {
+  putbuf(buffer_address,len+1);
 
-    printf("%c", get_user(start_of_buffer+i));
-
-
-  }*/
-
-
+ }
 
 }
