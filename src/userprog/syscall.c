@@ -36,14 +36,10 @@ syscall_handler(struct intr_frame *f UNUSED) {
       thread_exit();
     }
     /*Right now every system call calls write and then kills the process*/
-    writesyscall(stack_pointer);
+    int value=writesyscall(stack_pointer);
     //asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&f) : "memory");
     //NOT_REACHED();
-    asm volatile( "movl %0, %%eax"
-    :
-    : "b" (8)
-    : "eax"
-    );
+    f->eax=value;
     return;
   }
 
@@ -79,8 +75,8 @@ int writesyscall(void *sp) {
   //hex_dump (page_start,buffer, 2048, true);
   //printf(get_user(start_of_buffer));
   if (mode == 1) {
-    putbuf(buffer_address, len + 1);
-
+    putbuf(buffer_address, len);
+    return len;
   }
 
 }

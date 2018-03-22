@@ -4,8 +4,9 @@
 int
 main (int argc, char **argv)
 {
-  int i;
 
+  int i;
+  /*
   char* buffer="Hello word!\n";
   int res=write (1, buffer, 12);
   printf("Value is '%i'\n",res);
@@ -13,10 +14,12 @@ main (int argc, char **argv)
   buffer="Goodbye world!\n";
   write (1, buffer, 15);
 
-  /*
-  for (i = 0; i < argc; i++)
-     printf ("%s ", argv[i]);
-   printf ("\n");
   */
+  printf("There are '%i' arguements\n",argc);
+  if(argc!=0) {
+    for (i = 0; i < argc; i++)
+      printf("%s ", argv[i]);
+    printf("\n");
+  }
   return EXIT_SUCCESS;
 }

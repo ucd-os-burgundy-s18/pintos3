@@ -18,8 +18,8 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
-static thread_func start_process
-NO_RETURN;
+
+static thread_func start_process NO_RETURN;
 
 static bool load(const char *cmdline, void (**eip)(void), void **esp);
 
@@ -27,23 +27,26 @@ static bool load(const char *cmdline, void (**eip)(void), void **esp);
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
+
+
 tid_t
 process_execute(const char *file_name) {
   char *fn_copy;
+  //char* fn_args;
   char *program_name;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page(0);
-
+  //fn_args=palloc_get_page(0);
   program_name = palloc_get_page(0);
   if (fn_copy == NULL)
     return TID_ERROR;
   strlcpy(fn_copy, file_name, PGSIZE);
+  printf("Input is '%s'\n",fn_copy);
 
 
-  char **argv = palloc_get_page(0);
   int argc = 0;
   char *cur_arguement;
   char *token;
@@ -51,21 +54,17 @@ process_execute(const char *file_name) {
   int j = 0;
   //This first loop checks the number of arguements
   //so we can push argc to the stack
-  for (j = 0, str1 = fn_copy;; j++, str1 = NULL) {
-    token = strtok_r(str1, " ", &cur_arguement);
-    if (token == NULL) {
-      argc = j;
-      break;
-    }
-    if (j == 0) {
-      strlcpy(program_name, token, PGSIZE);
-      break;
-    }
-    argv[j] = token;
-  }
+  str1=fn_copy;
+  //for (j = 0, str1 = fn_copy;; j++, str1 = NULL) {
+  token = strtok_r(str1, " ", &cur_arguement);
+  strlcpy(program_name, token, PGSIZE);
+  strlcpy(fn_copy, file_name, PGSIZE);//Strtok messes up fn_copy from file_name
+  //so we copy it again
+  //strlcpy(fn_copy,fn_args,PGSIZE);
+  //palloc_free_page(fn_args);
   //TODO make the for loop into a single statement since we are only grabbing the program name
   //argc=1;
-
+  printf("Calling thread create with name '%s' and arguements '%s'\n",program_name,fn_copy);
 
 
 
@@ -75,9 +74,10 @@ process_execute(const char *file_name) {
   tid = thread_create(program_name, PRI_DEFAULT, start_process, fn_copy);
 
 
-  if (tid == TID_ERROR)
+  if (tid == TID_ERROR) {
     palloc_free_page(fn_copy);
-  palloc_free_page(program_name);
+    palloc_free_page(program_name);
+  }
   //palloc_free_page (argv);
   return tid;
 }
@@ -85,22 +85,24 @@ process_execute(const char *file_name) {
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process(void *in_args) {
-  /*we continue passing the entire arguements string into load()*/
+start_process (void *file_name_)
+{
+  printf("ENTERED START_PROCESS!\n");
+  char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
+
   /* Initialize interrupt frame and load executable. */
-  memset(&if_, 0, sizeof if_);
+  memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  char buffer[1024];
-  //hex_dump(PHYS_BASE,buffer,1024, true);
-  success = load(in_args, &if_.eip, &if_.esp);
+  success = load (file_name, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
+  palloc_free_page (file_name);
   if (!success)
-    thread_exit();
+    thread_exit ();
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -109,9 +111,8 @@ start_process(void *in_args) {
      we just point the stack pointer (%esp) to our stack frame
      and jump to it. */
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
-  NOT_REACHED();
+  NOT_REACHED ();
 }
-
 /* Waits for thread TID to die and returns its exit status.  If
    it was terminated by the kernel (i.e. killed due to an
    exception), returns -1.  If TID is invalid or if it was not a
@@ -123,6 +124,9 @@ start_process(void *in_args) {
    does nothing. */
 int
 process_wait(tid_t child_tid UNUSED) {
+  for(;;){
+
+  }
   return -1;
 }
 
@@ -240,6 +244,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
    Returns true if successful, false otherwise. */
 bool
 load(const char *cmdline, void (**eip)(void), void **esp) {
+  printf("aaa\n");
   char **argv = palloc_get_page(0);
   int argc = 0;
   char *scratch_space;
@@ -256,7 +261,7 @@ load(const char *cmdline, void (**eip)(void), void **esp) {
     }
     argv[j] = token;
   }
-  //printf("loading\n");
+  printf("loading\n");
   struct thread *t = thread_current();
   struct Elf32_Ehdr ehdr;
   struct file *file = NULL;
@@ -363,6 +368,9 @@ load(const char *cmdline, void (**eip)(void), void **esp) {
 
 static bool install_page(void *upage, void *kpage, bool writable);
 
+
+void push(void**esp,void*buffer,size_t size);
+
 /* Checks whether PHDR describes a valid, loadable segment in
    FILE and returns true if so, false otherwise. */
 static bool
@@ -462,26 +470,68 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
   return true;
 }
 
+/*decrements *esp by size(moving to the next part in the stack)
+ * and then copys the contents of buffer into esp
+ */
+void push(void**esp,void*buffer,size_t size){
+
+  *esp-= size;
+  memcpy(*esp, buffer, size);
+
+
+}
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
 setup_stack(void **esp, int argc, char **argv) {
+  printf("Setting up stack\n");
   uint8_t *kpage;
   uint8_t *upage;
   bool success = false;
-
+  void* addresses[argc];//When pushing arguements we save their addresses;
   kpage = palloc_get_page(PAL_USER | PAL_ZERO);
+
   if (kpage != NULL) {
     upage = ((uint8_t *) PHYS_BASE) - PGSIZE;
     success = install_page(upage, kpage, true);
-    if (success)
-      //*esp = PHYS_BASE;
-      *esp = PHYS_BASE - 12;
-    else
+
+    if (success) {
+
+
+      *esp = PHYS_BASE;
+
+      //*esp = PHYS_BASE - 12;
+    }else {
       palloc_free_page(kpage);
+    }
   }
-  //char buffer[1024];
-  //hex_dump(,buffer,1024, true);
+  //Now that we have our stack setup we gotta push our values to it
+  //size_t offset = 0;
+  for (int i = 0; i < argc; ++i) {
+    size_t arg_size = 0;
+    //Inner loop used for counting the size of each arguement
+    for (;;) {
+      if (argv[i][j] != '\0') {
+        ++arg_size;
+      } else {
+        break;
+      }
+    }
+
+
+
+    //We push our addresses
+    printf("Pushing argument '%s'\n",argv[i]);
+    push(esp,argv[i],arg_size);
+    addresses[i]=*esp;
+    //printf("Done pushing\n");
+    //hex_dump(kpage-PGSIZE,buffer,PGSIZE, true);
+    //offset -= size_rounded;//We move our offset to the next position on the stack
+  }
+  /*Now that we have the contents of our arguements pushed in the stack, and their addresses on the
+   * stack saved, we can */
+  //size_t size_rounded = ROUND_UP(j, sizeof(sizeof(uint32_t)));
+
   return success;
 }
 
