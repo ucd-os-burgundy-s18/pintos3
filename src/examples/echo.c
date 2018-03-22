@@ -17,7 +17,7 @@ main (int argc, char **argv)
   */
   printf("There are '%i' arguements\n",argc);
   if(argc!=0) {
-    for (i = 0; i < argc; i++)
+    for (i = 1; i < argc; i++)
       printf("%s ", argv[i]);
     printf("\n");
   }

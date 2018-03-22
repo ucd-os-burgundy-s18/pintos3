@@ -72,7 +72,7 @@ process_execute(const char *file_name) {
    * For whatever reason it did not like passing the arguements struct in to start_process
    * via thread_create so I just decided to pass in the entire string and reparse it later*/
   tid = thread_create(program_name, PRI_DEFAULT, start_process, fn_copy);
-
+  printf("exited thread create\n");
 
   if (tid == TID_ERROR) {
     palloc_free_page(fn_copy);
@@ -244,7 +244,7 @@ static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
    Returns true if successful, false otherwise. */
 bool
 load(const char *cmdline, void (**eip)(void), void **esp) {
-  printf("aaa\n");
+  //printf("aaa\n");
   char **argv = palloc_get_page(0);
   int argc = 0;
   char *scratch_space;
@@ -261,7 +261,7 @@ load(const char *cmdline, void (**eip)(void), void **esp) {
     }
     argv[j] = token;
   }
-  printf("loading\n");
+  //printf("loading\n");
   struct thread *t = thread_current();
   struct Elf32_Ehdr ehdr;
   struct file *file = NULL;
@@ -369,7 +369,7 @@ load(const char *cmdline, void (**eip)(void), void **esp) {
 static bool install_page(void *upage, void *kpage, bool writable);
 
 
-void push(void**esp,void*buffer,size_t size);
+//void push(void* kpage,uint8_t* ofs,void*buffer,size_t size);
 
 /* Checks whether PHDR describes a valid, loadable segment in
    FILE and returns true if so, false otherwise. */
@@ -473,22 +473,31 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 /*decrements *esp by size(moving to the next part in the stack)
  * and then copys the contents of buffer into esp
  */
-void push(void**esp,void*buffer,size_t size){
+void push(void* kpage,unsigned int* ofs,void*buffer,size_t size){
+  //printf("Before\n");
+  char temp_buffer[size];
+  //hex_dump(kpage+*ofs-size,kpage+*ofs-size,size, true);
+  //hex_dump((unsigned int)(ofs-size),kpage,size, true);
+  //printf("Old esp is '%p'\n",kpage+*ofs);
+  *ofs-= size;
+  //printf("new esp is '%p'\n",kpage+*ofs);
+  //printf("Pushing '%s' with size '%i' to address '%p'\n",buffer,size,kpage+*ofs);
+  memcpy(kpage+*ofs, buffer, size);
+  //hex_dump(kpage+*ofs,kpage+*ofs,size, true);
 
-  *esp-= size;
-  memcpy(*esp, buffer, size);
-
-
+  //*(kpage+*ofs)=5;
 }
+
+
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
 setup_stack(void **esp, int argc, char **argv) {
-  printf("Setting up stack\n");
+  //printf("Setting up stack\n");
   uint8_t *kpage;
   uint8_t *upage;
   bool success = false;
-  void* addresses[argc];//When pushing arguements we save their addresses;
+  uint32_t addresses[argc+1];//When pushing arguements we save their addresses;
   kpage = palloc_get_page(PAL_USER | PAL_ZERO);
 
   if (kpage != NULL) {
@@ -505,32 +514,72 @@ setup_stack(void **esp, int argc, char **argv) {
       palloc_free_page(kpage);
     }
   }
+
+
+  unsigned int ofs=PGSIZE;
+  // - sizeof(uint8_t);
+
   //Now that we have our stack setup we gotta push our values to it
   //size_t offset = 0;
   for (int i = 0; i < argc; ++i) {
-    size_t arg_size = 0;
+    size_t arg_size = strlen(argv[i])+1;
     //Inner loop used for counting the size of each arguement
-    for (;;) {
-      if (argv[i][j] != '\0') {
-        ++arg_size;
-      } else {
-        break;
-      }
-    }
+
 
 
 
     //We push our addresses
-    printf("Pushing argument '%s'\n",argv[i]);
-    push(esp,argv[i],arg_size);
-    addresses[i]=*esp;
+    //printf("Pushing argument '%s'\n",argv[i]);
+    push(kpage,&ofs,argv[i],arg_size);
+    addresses[i]=(unsigned int)(*esp)-((unsigned int)PGSIZE-(unsigned int)(ofs));
+
+    //addresses[i]=*esp-(unsigned int)PGSIZE-(unsigned int)(ofs);
     //printf("Done pushing\n");
     //hex_dump(kpage-PGSIZE,buffer,PGSIZE, true);
     //offset -= size_rounded;//We move our offset to the next position on the stack
   }
+  //char test=0;
+  //push(kpage,&test,argv[i], sizeof());
+  //hex_dump(*esp,buffer,PHYS_BASE-*esp, true);
   /*Now that we have the contents of our arguements pushed in the stack, and their addresses on the
-   * stack saved, we can */
-  //size_t size_rounded = ROUND_UP(j, sizeof(sizeof(uint32_t)));
+   * stack saved, we can word aligh the stack pointer*/
+  //*esp=(void*)ROUND_DOWN((unsigned long)*esp,4);
+  unsigned int i= ((unsigned int)(ofs))%4;
+  ofs-=i;
+  /*Now that we are aligned we can start pushing pointers to argv
+   *We start with a null terminator for the entire argv
+   */
+  uint32_t null=0;/*
+ * Yes I know passing in a refrence to an int and de refrencing it in the function
+ * Seems like extra work but it saves the time of having to make another push() function
+  */
+  push(kpage,&ofs,&null,sizeof(uint32_t));
+  /*We then go in reverse order and push the addresses of each argv, rounding down each time*/
+  for(int i=argc-1; i>=0; --i){
+    uint32_t cur_address=addresses[i];
+    //push(esp,&cur_address, sizeof(cur_address));
+    push(kpage,&ofs,&cur_address,sizeof(uint32_t));
+  }
+  /*We push the address of our new array on the stack in this case it is the last value of esp*/
+  uint32_t start_of_argv=(unsigned int)(*esp)-((unsigned int)PGSIZE-(unsigned int)(ofs));
+  //*esp=(void*)ROUND_DOWN((unsigned long)*esp,4);
+  //push(esp,&start_of_argv, 1);
+  push(kpage,&ofs,&start_of_argv, sizeof(uint32_t));
+  /*we then push argc*/
+  push(kpage,&ofs,&argc,sizeof(uint32_t));
+  //ofs -= sizeof(void *);
+  /*and finaly our return address*/
+  uint32_t zero=0;
+  push(kpage,&ofs,&zero,sizeof(uint32_t));
+  //We change *esp back to its origional value
+
+  //*esp=oldesp;
+
+
+  //and then subtract our offset.
+  unsigned int ofs2=(unsigned int)PGSIZE-(unsigned int)(ofs);
+
+  *esp=(unsigned int)(*esp)-ofs2;
 
   return success;
 }

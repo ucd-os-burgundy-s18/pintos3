@@ -4,6 +4,7 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/init.h"
 #include "userprog/pagedir.h"
 
 static void syscall_handler(struct intr_frame *);
@@ -12,7 +13,8 @@ void
 syscall_init(void) {
   intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall");
 }
-
+//TODO rewrite syscall handler to use an array of function pointers
+//TODO implement exit() so that it unblocks processes that are waiting.
 static void
 syscall_handler(struct intr_frame *f UNUSED) {
   //printf("system call!\n");
@@ -33,7 +35,9 @@ syscall_handler(struct intr_frame *f UNUSED) {
      printf("value at stack pointer+'%i' is '%i'\n", i, get_user(stack_pointer + i));
     }*/
     if(get_user(stack_pointer)==1){
+      //power_off();
       thread_exit();
+
     }
     /*Right now every system call calls write and then kills the process*/
     int value=writesyscall(stack_pointer);
@@ -47,6 +51,7 @@ syscall_handler(struct intr_frame *f UNUSED) {
   //for(int i =pg_round_down(stack_pointer)+12; i<stack_pointer; ++i){
 
   //}
+  printf("Syscall handler not implemented for this function!\n");
   thread_exit();
 }
 
