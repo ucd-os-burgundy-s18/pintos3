@@ -31,6 +31,9 @@ static bool load(const char *cmdline, void (**eip)(void), void **esp);
 
 tid_t
 process_execute(const char *file_name) {
+  if(strlen(file_name)>=128){
+    return TID_ERROR ;
+  }
   char *fn_copy;
   //char* fn_args;
   char *program_name;
@@ -60,19 +63,19 @@ process_execute(const char *file_name) {
   strlcpy(program_name, token, PGSIZE);
   strlcpy(fn_copy, file_name, PGSIZE);//Strtok messes up fn_copy from file_name
   //so we copy it again
-  //strlcpy(fn_copy,fn_args,PGSIZE);
-  //palloc_free_page(fn_args);
-  //TODO make the for loop into a single statement since we are only grabbing the program name
+  //ODO make the for loop into a single statement since we are only grabbing the program name
   //argc=1;
-  printf("Calling thread create with name '%s' and arguements '%s'\n",program_name,fn_copy);
+  //printf("Calling thread create with name '%s' and arguements '%s'\n",program_name,fn_copy);
+  //struct arguements* cur_args;
 
+  //strlcpy(cur_args->args,file_name,128);
 
 
   /* Create a new thread to execute PROGRAM_NAME.
    * For whatever reason it did not like passing the arguements struct in to start_process
    * via thread_create so I just decided to pass in the entire string and reparse it later*/
   tid = thread_create(program_name, PRI_DEFAULT, start_process, fn_copy);
-  printf("exited thread create\n");
+  //printf("exited thread create\n");
 
   if (tid == TID_ERROR) {
     palloc_free_page(fn_copy);
@@ -87,7 +90,7 @@ process_execute(const char *file_name) {
 static void
 start_process (void *file_name_)
 {
-  printf("ENTERED START_PROCESS!\n");
+  //printf("ENTERED START_PROCESS!\n");
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
@@ -124,12 +127,25 @@ start_process (void *file_name_)
    does nothing. */
 int
 process_wait(tid_t child_tid UNUSED) {
+  /*Notes on how this will be implemented in the future
+   * Each thread will contain a semaphore and a list of semaphores other threads called p_waiters
+   * have attached to the current thread.
+   * 1. When process_wait() and the thread with child_tid
+   *    is looked by id up from the allthreads list in threads.h/c
+   * 2. The current thread adds its semaphore to the childs p_waiters list and then calls sema_down()
+   *
+   * 3. When a thread dies, it calls sema_up() an all elements of its p_waiters list.
+  */
+
   for(;;){
 
   }
   return -1;
 }
-
+struct thread* find_by_tid(tid_t tid){
+  //list e=all_list;
+  return 0;
+}
 /* Free the current process's resources. */
 void
 process_exit(void) {
