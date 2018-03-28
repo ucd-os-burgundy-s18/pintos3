@@ -68,6 +68,8 @@ syscall_handler(struct intr_frame *f UNUSED) {
   thread_exit();
 }
 
+
+
 int writesyscall(void *sp) {
   int mode = get_user(sp + 4);
   int len = get_user(sp + 12);
@@ -100,6 +102,7 @@ int writesyscall(void *sp) {
 }
 
 
+
 bool createsyscall(const char* file, unsigned initial_size)
 {
   lock_acquire(&file_lock);
@@ -107,6 +110,8 @@ bool createsyscall(const char* file, unsigned initial_size)
   lock_release(&file_lock);
   return success;
 }
+
+
 
 int open(const char *file)
 {
@@ -132,6 +137,8 @@ int open(const char *file)
   return a_node->fd;
 
 }
+
+
 
 int readsyscall(int fd, void* buffer, unsigned size)
 {
@@ -176,12 +183,14 @@ int readsyscall(int fd, void* buffer, unsigned size)
   return num_bytes;
 
 }
+
+
   
 void seeksyscall(int fd, unsigned position)
 {
   lock_acquire(&file_lock);
 
-   struct list_elem *e;
+  struct list_elem *e;
 
   struct file_node *F;
 
@@ -205,5 +214,51 @@ void seeksyscall(int fd, unsigned position)
 
   lock_release(&file_lock);
 
-  
+}
+
+
+
+bool removesyscall(const char* file)
+{
+  lock_acquire(&file_lock);
+
+  bool check = filesys_remove(file);
+
+  lock_release(&file_lock);
+
+  return check;
+}
+
+
+int filesizesyscall(int fd)
+{
+  lock_acquire(&file_lock);
+
+  struct list_elem *e;
+
+  struct file_node *F;
+
+  e = list_begin(&fileList);
+
+  while( F->fd != fd ||  e != list_end(&fileList) ) {
+
+      F = list_entry(e, struct file_node, node);
+
+    e = list_next(e);     
+  }
+
+  struct file *aFile = F->aFile;
+
+  if(!aFile)
+  {
+    lock_release(&file_lock);
+    return -1;
+  }
+
+  int size = file_length(aFile);
+
+  lock_release(&file_lock);
+
+  return size;
+
 }
