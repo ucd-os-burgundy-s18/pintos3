@@ -1,11 +1,24 @@
 #include "userprog/syscall.h"
 #include <stdio.h>
 #include <syscall-nr.h>
+#include "threads/synch.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "threads/init.h"
 #include "userprog/pagedir.h"
+
+struct lock file_lock;
+
+struct list fileList;
+
+struct file_node {
+
+  struct file* aFile;
+  int fd;
+  struct list_elem* node;
+
+};
 
 static void syscall_handler(struct intr_frame *);
 
@@ -85,3 +98,82 @@ int writesyscall(void *sp) {
   }
 
 }
+
+
+bool createsyscall(const char* file, unsigned initial_size)
+{
+  lock_acquire(&file_lock);
+  bool success = filesys_create(file, initial_size);
+  lock_release(&file_lock);
+  return success;
+}
+
+int open(const char *file)
+{
+  lock_acquire(&file_lock);
+  struct file *afile = filesys_open();
+
+  if(!afile)
+  {
+    lock_release(&file_lock);
+    return -1;
+  }
+
+  struct file_node* a_node = malloc(sizeof(struct file_node));
+
+  a_node->aFile = afile;
+  a_node->fd = thread_current()->fd;
+  thread_current()->fd++;
+
+  list_push_back(&fileList, a_node->node);
+
+  lock_release(&file_lock);
+
+  return a_node->fd;
+
+}
+
+int readsyscall(int fd, void* buffer, unsigned size)
+{
+  if(fd == 0)
+  {
+    int j = 0;
+    uint8_t* locBuffer = (uint8_t*) buffer;
+    for(j = 0; j < size; ++j)
+    {
+      locBuffer[j] = input_getc();
+    }
+
+    return size;
+  }
+
+  lock_acquire(&file_lock);
+
+  //struct thread *t = thread_current();
+  struct list_elem *e;
+
+  struct file_node *F;
+
+  e = list_begin(&fileList);
+
+  while( F->fd != fd ||  e != list_end(&fileList) ) {
+
+      F = list_entry(e, struct file_node, node);
+
+    e = list_next(e);
+  }
+
+  struct file *aFile = F->aFile;
+  if(!aFile)
+  {
+    lock_release(&file_lock);
+    return -1;
+  }
+
+  int num_bytes = file_read(aFile, buffer, size);
+  lock_release(&file_lock);
+
+  return num_bytes;
+
+}
+  
