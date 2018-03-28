@@ -160,7 +160,7 @@ int readsyscall(int fd, void* buffer, unsigned size)
 
       F = list_entry(e, struct file_node, node);
 
-    e = list_next(e);
+    e = list_next(e);     
   }
 
   struct file *aFile = F->aFile;
@@ -177,3 +177,33 @@ int readsyscall(int fd, void* buffer, unsigned size)
 
 }
   
+void seeksyscall(int fd, unsigned position)
+{
+  lock_acquire(&file_lock);
+
+   struct list_elem *e;
+
+  struct file_node *F;
+
+  e = list_begin(&fileList);
+
+  while( F->fd != fd ||  e != list_end(&fileList) ) {
+
+      F = list_entry(e, struct file_node, node);
+
+    e = list_next(e);     
+  }
+
+  struct file *aFile = F->aFile;
+  if(!aFile)
+  {
+    lock_release(&file_lock);
+    return -1;
+  }
+
+  file_seek(aFile, position);
+
+  lock_release(&file_lock);
+
+  
+}
