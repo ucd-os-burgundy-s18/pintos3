@@ -130,23 +130,17 @@ page_fault (struct intr_frame *f)
     See [IA32-v2a] "MOV--Move to/from Control Registers" and
     [IA32-v3a] 5.15 "Interrupt 14--Page Fault Exception
     (#PF)". */
- register int *EAX asm ("eax");
+ asm ("movl %%cr2, %0" : "=r" (fault_addr));
  user = (f->error_code & PF_U) != 0;
- if(!user) {
-  printf("Value of EAX is '%i'\n", EAX);
-  //int value = -1;
-  asm volatile( "movl %0, %%eax"
-  :
-  : "b" (-1)
-  : "eax"
-  );
-  asm volatile( "jmp %0"
-  :
-  : "b" (EAX)
-  );
+ if(user) {
+  printf("SEGFAULT!\n");
+  int value = -1;
+  f->eip=f->eax;
+  f->eax=-1;
+
+  return;
  }
 
- asm ("movl %%cr2, %0" : "=r" (fault_addr));
 
  /* Turn interrupts back on (they were only off so that we could
     be assured of reading CR2 before it changed). */

@@ -99,10 +99,13 @@ struct thread
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
     struct list children;               /* Threads spawned by this current thread*/
-    struct semaphore p_wait;            /* Used to block the thread if it is waiting on another to die, */
+
     struct thread* parent;              /* Thread that spawned this current thread, will be NULL if the thread is the pintos main thread*/
-    struct list_elem child_elem;        /* Used in parents children lists*/
-    bool parent_is_waiting;             /* If the parent is waiting on us they set this to true */
+    struct childStatus* p_waiter;       /*Given to a child when a parent waits on it. When the child exits it unlocks the parent using it*/
+    tid_t p_waiting_on;
+    int exit_status;
+
+    struct list_elem child_elem;
 #endif
 
     /* Owned by thread.c. */

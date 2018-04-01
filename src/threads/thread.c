@@ -98,6 +98,10 @@ thread_init (void)
   init_thread (initial_thread, "main", PRI_DEFAULT);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
+
+
+
+
 }
 
 /* Starts preemptive thread scheduling by enabling interrupts.
@@ -197,8 +201,10 @@ thread_create (const char *name, int priority,
   sf = alloc_frame (t, sizeof *sf);
   sf->eip = switch_entry;
   sf->ebp = 0;
-  printf("Now running thread with name '%s'\n",name);
-
+  //printf("Now running thread with name '%s'\n",name);
+  t->p_waiter=NULL;
+  t->p_waiting_on=-1;
+  t->exit_status=0;
   /* Add to run queue. */
   thread_unblock (t);
 
@@ -467,7 +473,9 @@ init_thread (struct thread *t, const char *name, int priority)
 
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
+  list_init(&t->children);
   intr_set_level (old_level);
+
 
 }
 
