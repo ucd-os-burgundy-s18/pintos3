@@ -10,7 +10,7 @@
 
 struct lock file_lock;
 
-static struct list fileList;
+
 struct file_node {
 
     struct file* aFile;
@@ -29,20 +29,38 @@ void checkForBadArgs(struct intr_frame *f,int numArgs){
 
 }
 
+struct file_node* get_file_node(int fd){
+  struct list* f_list=&thread_current()->fileList;
+  struct list_elem* e;
+  struct file_node* F;
+
+  for (e = list_begin(f_list); e != list_end(f_list); e = list_next(f_list)) {
+    //printf("Closed\n");
+    struct file_node* F= list_entry(e,struct file_node, node);
+    //printf("FD IS %i FFD is %i\n",fd,F->fd);
+    if (fd==F->fd) {
+      return F;
+      //break;
+
+    }
+  }
+  return NULL;
+
+}
+
 static void syscall_handler(struct intr_frame *);
 
 void
 syscall_init(void) {
   intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall");
 
+  lock_init(&file_lock);
 }
 
 /*Placeholder system call, can be used for debug*/
 void placeHolderSyscall(struct intr_frame *f){
 
   printf("SYSTEM CALL '%i' IS NOT IMPLEMENTED YET!!!!!!!!!!!!!\n",get_user(f->esp));
-
-
 }
 
 void haltSyscall(struct intr_frame *f) {
@@ -128,25 +146,59 @@ void writeSyscall(struct intr_frame *f) {
 
 
 
-bool createsyscall(const char* file, unsigned initial_size)
+void createsyscall(struct intr_frame *f)
 {
-  lock_acquire(&file_lock);
-  bool success = filesys_create(file, initial_size);
-  lock_release(&file_lock);
-  return success;
+  //printf("CREATING\n");
+  unsigned long buffer_address = get_user(f->esp + 7);
+  buffer_address = buffer_address * 256 + get_user(f->esp + 6);
+  buffer_address = buffer_address * 256 + get_user(f->esp + 5);
+  buffer_address = buffer_address * 256 + get_user(f->esp + 4);
+
+  int initial_size=get_user(f->esp + 9);
+  if(((char*)buffer_address)[0]=='\0'){
+    //printf("NULL FILENAME\n");
+    exitWithError();
+    //return;
+  }else {
+    // printf("Initial size is %i\n",initial_size);
+    lock_acquire(&file_lock);
+
+
+    bool success = filesys_create(buffer_address, initial_size);
+
+    lock_release(&file_lock);
+    f->eax = (int) success;
+    //printf("CREATED\n");
+    //return;
+  }
 }
 
 
 
-int open(const char *file)
+void open(struct intr_frame *f)
 {
+  unsigned long buffer_address = get_user(f->esp + 7);
+  buffer_address = buffer_address * 256 + get_user(f->esp + 6);
+  buffer_address = buffer_address * 256 + get_user(f->esp + 5);
+  buffer_address = buffer_address * 256 + get_user(f->esp + 4);
+  //char file[128];
+  char* file=(char*)buffer_address;
+
+  if(file[0]=='\0') {
+    //printf("NULL INPUIT\n");
+    f->eax=-1;
+    return;
+  }
+
   lock_acquire(&file_lock);
-  struct file *afile = filesys_open();
+  struct file *afile = filesys_open(file);
 
   if(!afile)
   {
+    //printf("BAD FILE\n");
+    f->eax=-1;
     lock_release(&file_lock);
-    return -1;
+    return;
   }
 
   struct file_node* a_node = malloc(sizeof(struct file_node));
@@ -155,18 +207,73 @@ int open(const char *file)
   a_node->fd = thread_current()->fd;
   thread_current()->fd++;
 
-  list_push_back(&fileList, &a_node->node);
+  list_push_back(&thread_current()->fileList, &a_node->node);
 
   lock_release(&file_lock);
 
-  return a_node->fd;
+  //return a_node->fd;
+  f->eax=a_node->fd;
+
+}
+
+void closeSyscall(struct intr_frame *f) {
+  int fd = get_user(f->esp + 4);
+  if (fd < 2) {
+    f->eax = -1;
+    return;
+  }
+  lock_acquire(&file_lock);
+
+  struct list_elem *e;
+  struct list *f_list = &thread_current()->fileList;
+
+  if (fd != -1) {
+    struct file_node *F = get_file_node(fd);
+    if(F!=NULL) {
+      file_close(F->aFile);
+      list_remove(&F->node);
+      free(F);
+    }
+  } else {
+    for (e = list_begin(f_list); e != list_end(f_list); e = list_next(f_list)) {
+      struct file_node *F = list_entry(e,
+      struct file_node, node);
+      file_close(F->aFile);
+      list_remove(&F->node);
+      free(F);
+    }
+  }
+
+  //printf("Closed\n");
+  lock_release(&file_lock);
 
 }
 
 
-
-int readsyscall(int fd, void* buffer, unsigned size)
+void readSyscall(struct intr_frame *f)
 {
+
+  //int readSyscall(int fd, void* buffer, unsigned size)
+
+  int fd = get_user(f->esp + 4);
+  unsigned size = get_user(f->esp + 12);
+
+
+  //printf("Buffer start address: '%p'\n", start_of_buffer);
+
+  unsigned long buffer_address = get_user(f->esp + 11);
+  buffer_address = buffer_address * 256 + get_user(f->esp + 10);
+  buffer_address = buffer_address * 256 + get_user(f->esp + 9);
+  buffer_address = buffer_address * 256 + get_user(f->esp + 8);
+
+  void* buffer=(void*)buffer_address;
+  //putbuf((char*)buffer,11);
+  if(fd==1){
+    f->eax=-1;
+    return;
+  }
+
+
   if(fd == 0)
   {
     int j = 0;
@@ -175,37 +282,37 @@ int readsyscall(int fd, void* buffer, unsigned size)
     {
       locBuffer[j] = input_getc();
     }
-
-    return size;
+    f->eax=size;
+    return;
   }
 
   lock_acquire(&file_lock);
 
-  //struct thread *t = thread_current();
-  struct list_elem *e;
 
-  struct file_node *F;
 
-  e = list_begin(&fileList);
 
-  while( F->fd != fd ||  e != list_end(&fileList) ) {
+  struct file_node *F=get_file_node(fd);
 
-      F = list_entry(e, struct file_node, node);
+  ASSERT((fd==F->fd));
 
-    e = list_next(e);     
-  }
 
-  struct file *aFile = F->aFile;
+
+  struct aFile *aFile = F->aFile;
+
   if(!aFile)
   {
+
     lock_release(&file_lock);
+
     return -1;
   }
-
+  //printf("Got file\n");
   int num_bytes = file_read(aFile, buffer, size);
-  lock_release(&file_lock);
+  //printf("READ FILE\n");
 
-  return num_bytes;
+  lock_release(&file_lock);
+  f->eax=num_bytes;
+  return;
 
 }
 
@@ -220,9 +327,9 @@ void seeksyscall(int fd, unsigned position)
 
   struct file_node *F;
 
-  //e = list_begin(&fileList);
+  e = list_begin(&thread_current()->fileList);
 
-  while( F->fd != fd ||  e != list_end(&fileList) ) {
+  while( F->fd != fd ||  e != list_end(&thread_current()->fileList) ) {
 
       F = list_entry(e, struct file_node, node);
 
@@ -257,24 +364,17 @@ bool removesyscall(const char* file)
   return check;
 }
 
-
-int filesizesyscall(int fd)
+//int filesizesyscall(int fd)
+void filesizesyscall(struct intr_frame *f)
 {
-
+  int fd=get_user(f->esp+4);
   lock_acquire(&file_lock);
 
-  struct list_elem *e;
 
-  struct file_node *F;
 
-  //e = list_begin(&fileList);
+  struct file_node *F=get_file_node(fd);
 
-  while( F->fd != fd ||  e != list_end(&fileList) ) {
 
-      F = list_entry(e, struct file_node, node);
-
-    e = list_next(e);
-  }
 
 
 
@@ -283,14 +383,17 @@ int filesizesyscall(int fd)
   if(!aFile)
   {
     lock_release(&file_lock);
-    return -1;
+    f->eax=-1;
+    return;
+
   }
 
   int size = file_length(aFile);
 
   lock_release(&file_lock);
 
-  return size;
+  f->eax=size;
+  return;
 
 }
 
@@ -303,15 +406,15 @@ syscall_handler(struct intr_frame *f) {
   p[1]=exitSyscall;
   p[2]=execSyscall;
   p[3]=waitSyscall;
-  p[4]=placeHolderSyscall;//Create
+  p[4]=createsyscall;//Create
   p[5]=placeHolderSyscall;//Remove
-  p[6]=placeHolderSyscall;//Open
-  p[7]=placeHolderSyscall;//Filesize
-  p[8]=placeHolderSyscall;//Read
+  p[6]=open;//Open
+  p[7]=filesizesyscall;//Filesize
+  p[8]=readSyscall;//Read
   p[9]=writeSyscall;      //Write
   p[10]=placeHolderSyscall;//seek
   p[11]=placeHolderSyscall;//tell
-  p[12]=placeHolderSyscall;//close
+  p[12]=closeSyscall;//close
 
 
   void *stack_pointer = f->esp;
@@ -330,18 +433,8 @@ syscall_handler(struct intr_frame *f) {
     }
     p[index](f);
     return;
-    /*Right now every system call calls write and then kills the process*/
-    //int value=writesyscall(stack_pointer);
-    //asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&f) : "memory");
-    //NOT_REACHED();
-    //f->eax=value;
-    //return;
+
   }
 
-  //
-  //for(int i =pg_round_down(stack_pointer)+12; i<stack_pointer; ++i){
-
-  //}
-  //printf("Syscall handler not implemented for this function!\n");
   thread_exit();
 }

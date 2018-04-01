@@ -212,19 +212,19 @@ process_wait(tid_t child_tid) {
     cur->p_waiting_on=child_tid;
     /*
      * The childStatus struct contains a semaphore which we use to block the parent.
-     * When the child dies, it calls sema_up() on the semaphore
+     * When the child dies, it calls sema_up() on the semaphore.
      *
      */
     struct childStatus* child_life=(struct childStatus*) malloc(sizeof(struct childStatus));
     sema_init(&child_life->blocker,0);
     child->p_waiter=child_life;
-   // printf("SLEEPING\n");
+
     sema_down(&child_life->blocker);
     exit_code=child_life->exit_code;
-   // printf("EXIT CODE: '%i'\n",exit_code);
+
     free(child_life);
   }else{
-    return -1;
+    return -1;//If the ID dosent exist in the threads children list we return -1
   }
 
   return exit_code;

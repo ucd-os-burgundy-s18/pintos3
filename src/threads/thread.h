@@ -104,7 +104,7 @@ struct thread
     struct childStatus* p_waiter;       /*Given to a child when a parent waits on it. When the child exits it unlocks the parent using it*/
     tid_t p_waiting_on;
     int exit_status;
-
+    struct list fileList;
     struct list_elem child_elem;
     bool failed_to_spawn;
     int child_exit_status;
