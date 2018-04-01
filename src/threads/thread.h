@@ -4,7 +4,8 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
-
+#include "threads/synch.h"
+#include <list.h>
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -97,8 +98,11 @@ struct thread
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
-    struct list p_waiters;              /*Threads that are waiting on this one to die*/
-    struct semaphore* p_wait;            /*Used to block the thread if it is waiting on another to die*/
+    struct list children;               /* Threads spawned by this current thread*/
+    struct semaphore p_wait;            /* Used to block the thread if it is waiting on another to die, */
+    struct thread* parent;              /* Thread that spawned this current thread, will be NULL if the thread is the pintos main thread*/
+    struct list_elem child_elem;        /* Used in parents children lists*/
+    bool parent_is_waiting;             /* If the parent is waiting on us they set this to true */
 #endif
 
     /* Owned by thread.c. */

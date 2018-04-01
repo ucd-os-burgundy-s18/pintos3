@@ -198,6 +198,7 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
   printf("Now running thread with name '%s'\n",name);
+
   /* Add to run queue. */
   thread_unblock (t);
 
@@ -467,6 +468,7 @@ init_thread (struct thread *t, const char *name, int priority)
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
+
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and

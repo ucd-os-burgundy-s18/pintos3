@@ -69,29 +69,63 @@ process_execute(const char *file_name) {
   //struct arguements* cur_args;
 
   //strlcpy(cur_args->args,file_name,128);
-
-
+  struct semaphore parent_lock;
+  sema_init(&parent_lock,0);
+  struct arguments* cur_args=palloc_get_page(0);
+  cur_args->parent=thread_current();
+  cur_args->args=fn_copy;
+  cur_args->child_spawn_lock=&parent_lock;
   /* Create a new thread to execute PROGRAM_NAME.
    * For whatever reason it did not like passing the arguements struct in to start_process
    * via thread_create so I just decided to pass in the entire string and reparse it later*/
-  tid = thread_create(program_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create(program_name, PRI_DEFAULT, start_process, cur_args);
+
   //printf("exited thread create\n");
+  //We lock the parent once the child is spawned
+  sema_down(&parent_lock);
 
   if (tid == TID_ERROR) {
     palloc_free_page(fn_copy);
     palloc_free_page(program_name);
+    palloc_free_page(cur_args);
   }
   //palloc_free_page (argv);
   return tid;
 }
 
+/* HELPERS FOR SYNCRONAZATION OF PROCESSES
+ *
+ * Sets up the current thread for its parent and adds the current thread
+ * to the parents children list
+ */
+static void setup_parent(struct thread* parent){
+
+  thread_current()->parent=parent;
+  list_init(&thread_current()->children);
+  sema_init(&thread_current()->p_wait,0);
+  list_push_back(&parent->children, &thread_current()->child_elem);
+}
+//Used to search a children list by thread id.
+struct thread* find_by_tid(tid_t tid){
+  struct list_elem *e;
+  struct thread *t;
+  struct list *children = &thread_current()->children;
+  for (e = list_begin(children ); e != list_end(children ); e = list_next(e)) {
+    t = list_entry(e,struct thread, child_elem);
+    if(t->tid==tid){
+      return t;
+    }
+  }
+  return NULL;
+}
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *file_name_)
+start_process (void* in_args)
 {
   //printf("ENTERED START_PROCESS!\n");
-  char *file_name = file_name_;
+
+  struct arguments* args_struct=(struct arguments*)in_args;
   struct intr_frame if_;
   bool success;
 
@@ -100,13 +134,21 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+  success = load (args_struct->args, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
-  palloc_free_page (file_name);
-  if (!success)
-    thread_exit ();
+  palloc_free_page (args_struct->args);
+  if (!success) {
+    sema_up(args_struct->child_spawn_lock);
+    thread_exit();
+  }
 
+  //We initialize the current threads parent and synronazation varibles
+
+  setup_parent(args_struct->parent);
+  //We add ourselves to the parents children list
+
+  palloc_free_page (args_struct);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -116,6 +158,7 @@ start_process (void *file_name_)
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
+
 /* Waits for thread TID to die and returns its exit status.  If
    it was terminated by the kernel (i.e. killed due to an
    exception), returns -1.  If TID is invalid or if it was not a
@@ -128,23 +171,14 @@ start_process (void *file_name_)
 int
 process_wait(tid_t child_tid UNUSED) {
   /*Notes on how this will be implemented in the future
-   * Each thread will contain a semaphore and a list of semaphores other threads called p_waiters
-   * have attached to the current thread.
-   * 1. When process_wait() and the thread with child_tid
-   *    is looked by id up from the allthreads list in threads.h/c
-   * 2. The current thread adds its semaphore to the childs p_waiters list and then calls sema_down()
-   *
-   * 3. When a thread dies, it calls sema_up() an all elements of its p_waiters list.
+   * Each thread will contain a semaphore, and
+   * 1.
   */
 
   for(;;){
 
   }
   return -1;
-}
-struct thread* find_by_tid(tid_t tid){
-  //list e=all_list;
-  return 0;
 }
 /* Free the current process's resources. */
 void
@@ -167,6 +201,7 @@ process_exit(void) {
     pagedir_activate(NULL);
     pagedir_destroy(pd);
   }
+  /*We remove ourselves from our parents children list, and wake up the parent if they
 }
 
 /* Sets up the CPU for running user code in the current
