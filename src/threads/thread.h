@@ -106,6 +106,10 @@ struct thread
     int exit_status;
 
     struct list_elem child_elem;
+    bool failed_to_spawn;
+    int child_exit_status;
+
+    int fd;
 #endif
 
     /* Owned by thread.c. */

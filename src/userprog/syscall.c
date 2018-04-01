@@ -10,67 +10,91 @@
 
 struct lock file_lock;
 
-struct list fileList;
-
+static struct list fileList;
 struct file_node {
 
-  struct file* aFile;
-  int fd;
-  struct list_elem* node;
+    struct file* aFile;
+    int fd;
+    struct list_elem node;
 
 };
+void exitWithError(){
+  thread_current()->exit_status=-1;
+  thread_exit();
+}
+void checkForBadArgs(struct intr_frame *f,int numArgs){
+  if(!is_user_vaddr(f->esp+(4*numArgs)))
+    exitWithError();
+
+
+}
 
 static void syscall_handler(struct intr_frame *);
 
 void
 syscall_init(void) {
   intr_register_int(0x30, 3, INTR_ON, syscall_handler, "syscall");
+
 }
-//TODO rewrite syscall handler to use an array of function pointers
-//TODO implement exit() so that it unblocks processes that are waiting.
-static void
-syscall_handler(struct intr_frame *f UNUSED) {
-  //printf("system call!\n");
-  void *stack_pointer = f->esp;
-  //printf("Address is '%p'\n", stack_pointer);
-  //printf("PHYS_BASE is '%p'\n", PHYS_BASE);
+
+/*Placeholder system call, can be used for debug*/
+void placeHolderSyscall(struct intr_frame *f){
+
+  printf("SYSTEM CALL '%i' IS NOT IMPLEMENTED YET!!!!!!!!!!!!!\n",get_user(f->esp));
 
 
-  if (is_user_vaddr(stack_pointer)) {
-    /* print a bunch of debug information*/
-    /*
-    printf("This is in user space\n");
-    printf("Top of page is '%p'\n", pg_round_up(stack_pointer));
-    printf("Bottom of page is '%p'\n", pg_round_down(stack_pointer));
-    //struct thread *t = thread_current ();
-    printf("value at stack pointer is '%i'\n", get_user(stack_pointer));
-    for (int i = -20; i < 20; ++i) {
-     printf("value at stack pointer+'%i' is '%i'\n", i, get_user(stack_pointer + i));
-    }*/
-    if(get_user(stack_pointer)==1){
-      //power_off();
-      thread_exit();
+}
 
-    }
-    /*Right now every system call calls write and then kills the process*/
-    int value=writesyscall(stack_pointer);
-    //asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&f) : "memory");
-    //NOT_REACHED();
-    f->eax=value;
-    return;
-  }
+void haltSyscall(struct intr_frame *f) {
 
-  //
-  //for(int i =pg_round_down(stack_pointer)+12; i<stack_pointer; ++i){
+  shutdown ();
+}
 
-  //}
-  printf("Syscall handler not implemented for this function!\n");
+void exitSyscall(struct intr_frame *f){
+  checkForBadArgs(f,1);
+  int value = get_user(f->esp + 4);
+  if(is_user_vaddr(f->esp + 4))
+  //printf("VALUE IS %i\n",value);
+  //f->eax=value;
+  thread_current()->exit_status=value;
   thread_exit();
 }
 
+void execSyscall(struct intr_frame *f){
 
 
-int writesyscall(void *sp) {
+
+
+
+
+  unsigned long buffer_address = get_user(f->esp + 7);
+  buffer_address = buffer_address * 256 + get_user(f->esp + 6);
+  buffer_address = buffer_address * 256 + get_user(f->esp + 5);
+  buffer_address = buffer_address * 256 + get_user(f->esp + 4);
+  char buffer[128];
+
+  //putbuf(buffer_address, 4);
+
+  void* sp=f->esp;
+  int i=0;
+  /*do {
+    buffer[i]=get_user((void*)buffer_address[i]);
+    ++i;
+    //printf("%c\n",buffer_address[i]);
+  }while(get_user(sp+i)!='\0');*/
+ // printf(buffer);
+  f->eax=process_execute(buffer_address);
+
+
+}
+
+void waitSyscall(struct intr_frame *f){
+  tid_t id=get_user(f->esp + 4);
+  f->eax=process_wait(id);
+}
+
+void writeSyscall(struct intr_frame *f) {
+  void *sp = f->esp;
   int mode = get_user(sp + 4);
   int len = get_user(sp + 12);
   /*
@@ -96,7 +120,8 @@ int writesyscall(void *sp) {
   //printf(get_user(start_of_buffer));
   if (mode == 1) {
     putbuf(buffer_address, len);
-    return len;
+
+    f->eax=len;
   }
 
 }
@@ -130,7 +155,7 @@ int open(const char *file)
   a_node->fd = thread_current()->fd;
   thread_current()->fd++;
 
-  list_push_back(&fileList, a_node->node);
+  list_push_back(&fileList, &a_node->node);
 
   lock_release(&file_lock);
 
@@ -188,20 +213,23 @@ int readsyscall(int fd, void* buffer, unsigned size)
   
 void seeksyscall(int fd, unsigned position)
 {
+
   lock_acquire(&file_lock);
 
   struct list_elem *e;
 
   struct file_node *F;
 
-  e = list_begin(&fileList);
+  //e = list_begin(&fileList);
 
   while( F->fd != fd ||  e != list_end(&fileList) ) {
 
       F = list_entry(e, struct file_node, node);
 
-    e = list_next(e);     
+    e = list_next(e);
   }
+
+
 
   struct file *aFile = F->aFile;
   if(!aFile)
@@ -232,20 +260,23 @@ bool removesyscall(const char* file)
 
 int filesizesyscall(int fd)
 {
+
   lock_acquire(&file_lock);
 
   struct list_elem *e;
 
   struct file_node *F;
 
-  e = list_begin(&fileList);
+  //e = list_begin(&fileList);
 
   while( F->fd != fd ||  e != list_end(&fileList) ) {
 
       F = list_entry(e, struct file_node, node);
 
-    e = list_next(e);     
+    e = list_next(e);
   }
+
+
 
   struct file *aFile = F->aFile;
 
@@ -261,4 +292,56 @@ int filesizesyscall(int fd)
 
   return size;
 
+}
+
+static void
+syscall_handler(struct intr_frame *f) {
+  /*SYSCALL LIST*/
+
+  int (*p[14]) (void* sp);
+  p[0]=haltSyscall;
+  p[1]=exitSyscall;
+  p[2]=execSyscall;
+  p[3]=waitSyscall;
+  p[4]=placeHolderSyscall;//Create
+  p[5]=placeHolderSyscall;//Remove
+  p[6]=placeHolderSyscall;//Open
+  p[7]=placeHolderSyscall;//Filesize
+  p[8]=placeHolderSyscall;//Read
+  p[9]=writeSyscall;      //Write
+  p[10]=placeHolderSyscall;//seek
+  p[11]=placeHolderSyscall;//tell
+  p[12]=placeHolderSyscall;//close
+
+
+  void *stack_pointer = f->esp;
+  //printf("Address is '%p'\n", stack_pointer);
+  //printf("PHYS_BASE is '%p'\n", PHYS_BASE);
+
+
+  if (is_user_vaddr(stack_pointer)) {
+
+
+    int index=get_user(stack_pointer);
+    //printf("RUNNING SYSCALL %i\n",index);
+    if(index<0 || index>12){
+      thread_current()->exit_status=-1;
+      thread_exit();
+    }
+    p[index](f);
+    return;
+    /*Right now every system call calls write and then kills the process*/
+    //int value=writesyscall(stack_pointer);
+    //asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&f) : "memory");
+    //NOT_REACHED();
+    //f->eax=value;
+    //return;
+  }
+
+  //
+  //for(int i =pg_round_down(stack_pointer)+12; i<stack_pointer; ++i){
+
+  //}
+  //printf("Syscall handler not implemented for this function!\n");
+  thread_exit();
 }

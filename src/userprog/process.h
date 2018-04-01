@@ -13,7 +13,7 @@ struct arguments {
     char *args;
     bool success;
     struct semaphore child_spawn_lock; /*Prevents the parent from running until the child has compleatly started or failed to start*/
-    bool child_success;                 /*When the thread tries to create a child the status of the child is saved here*/
+
 };
 
 /*Created on the fly in process_wait()

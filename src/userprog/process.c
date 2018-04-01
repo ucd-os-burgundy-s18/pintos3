@@ -72,7 +72,7 @@ process_execute(const char *file_name) {
   cur_args->args = fn_copy;
 
   sema_init(&cur_args->child_spawn_lock,0);
-  cur_args->child_success=false;
+  cur_args->success=false;
   /* Create a new thread to execute PROGRAM_NAME.
    * For whatever reason it did not like passing the arguements struct in to start_process
    * via thread_create so I just decided to pass in the entire string and reparse it later*/
@@ -81,12 +81,18 @@ process_execute(const char *file_name) {
   if (tid == TID_ERROR) {
     palloc_free_page(fn_copy);
     palloc_free_page(program_name);
-
+    tid=-1;
   }else {
     //printf("exited thread create\n");
     //We lock the parent once the child is spawned
     sema_down(&cur_args->child_spawn_lock);
+   // printf("Woke up\n");
+    if(cur_args->success==false){
+      tid=-1;
+      //printf("BOGAS\n");
+    }
     palloc_free_page(cur_args);
+
     //printf("Exited sema down\n");
   }
 
@@ -119,10 +125,18 @@ start_process(void *in_args) {
   /* If load failed, quit. */
 
   if (!success) {
+    //printf("Failed to start\n");
 
-    sema_up(&args_struct->child_spawn_lock);
+
+    thread_current()->exit_status=-1;
+    //printf("Unlocking parent\n");
     args_struct->success=false;
+    sema_up(&args_struct->child_spawn_lock);
+   // printf("Unlocked\n");
+    thread_current()->failed_to_spawn=true;
     thread_exit();
+
+
   }
 
   //We initialize the current threads parent and synronazation varibles
@@ -130,11 +144,13 @@ start_process(void *in_args) {
   //setup_parent(args_struct->parent);
   struct thread *cur = thread_current();
   cur->parent = args_struct->parent;
+  //printf("Pushing child with id %i\n",cur->tid);
   list_push_back(&cur->parent->children, &cur->child_elem);
 
   //We add ourselves to the parents children list
-  //printf("Unlocking parent\n");
+
   sema_up(&args_struct->child_spawn_lock);
+  thread_yield();
 
 
   /* Start the user process by simulating a return from an
@@ -162,13 +178,16 @@ struct thread *find_by_tid(tid_t tid,struct thread* cur) {
     for (e = list_begin(children); e != list_end(&cur->children); e = list_next(e)) {
       //printf("ENTERED SEARCH1\n");
       child = list_entry(e,struct thread, child_elem);
+      //printf("Comparing child id: %i to input %i\n",child->tid,tid);
       if (child->tid == tid) {
         //printf("GOT IT\n");
         break;
 
       }
     }
-  }
+  }//else{
+    //printf("LIST EMPTY\n");
+  //}
   //printf("Returning\n");
   return child;
 }
@@ -184,10 +203,11 @@ struct thread *find_by_tid(tid_t tid,struct thread* cur) {
    does nothing. */
 int
 process_wait(tid_t child_tid) {
-
+  //printf("ENTERED WAIT\n");
   struct thread* cur=thread_current();
   struct thread* child=find_by_tid(child_tid,cur);
   int exit_code=0;
+
   if (child != NULL) {
     cur->p_waiting_on=child_tid;
     /*
@@ -198,10 +218,13 @@ process_wait(tid_t child_tid) {
     struct childStatus* child_life=(struct childStatus*) malloc(sizeof(struct childStatus));
     sema_init(&child_life->blocker,0);
     child->p_waiter=child_life;
-
+   // printf("SLEEPING\n");
     sema_down(&child_life->blocker);
     exit_code=child_life->exit_code;
+   // printf("EXIT CODE: '%i'\n",exit_code);
     free(child_life);
+  }else{
+    return -1;
   }
 
   return exit_code;
@@ -213,41 +236,47 @@ process_exit(void) {
 
   struct thread *cur = thread_current();
   uint32_t *pd;
-
+  if(!cur->failed_to_spawn){
   printf("%s: exit(%d)\n",cur->name,cur->exit_status);
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
-  pd = cur->pagedir;
-  if (pd != NULL) {
-    /* Correct ordering here is crucial.  We must set
-       cur->pagedir to NULL before switching page directories,
-       so that a timer interrupt can't switch back to the
-       process page directory.  We must activate the base page
-       directory before destroying the process's page
-       directory, or our active page directory will be one
-       that's been freed (and cleared). */
-    cur->pagedir = NULL;
-    pagedir_activate(NULL);
-    pagedir_destroy(pd);
-  }
-  /*We remove ourselves from our parents children list, and wake up the parent
-   *if they are waiting on us we wake them up
-   */
+
+    pd = cur->pagedir;
+    if (pd != NULL) {
+      /* Correct ordering here is crucial.  We must set
+         cur->pagedir to NULL before switching page directories,
+         so that a timer interrupt can't switch back to the
+         process page directory.  We must activate the base page
+         directory before destroying the process's page
+         directory, or our active page directory will be one
+         that's been freed (and cleared). */
+      cur->pagedir = NULL;
+      pagedir_activate(NULL);
+      pagedir_destroy(pd);
+    }
+    /*We remove ourselves from our parents children list, and wake up the parent
+     *if they are waiting on us we wake them up
+     */
 
 
-  struct thread *t;
-  struct thread *parent = &cur->parent;
+    struct thread *t;
+    struct thread *parent = &cur->parent;
 
 
-  if (!list_empty(&cur->parent->children)){
-    list_remove(&cur->child_elem);
+    if (!list_empty(&cur->parent->children)) {
 
-  }
-  if(cur->p_waiter!=NULL){
-    cur->p_waiter->exit_code=cur->exit_status;
-    sema_up(&cur->p_waiter->blocker);
+      list_remove(&cur->child_elem);
 
-  }
+    }
+    if (cur->p_waiter != NULL) {
+
+      cur->p_waiter->exit_code = cur->exit_status;
+      sema_up(&cur->p_waiter->blocker);
+
+    }
+  }//else{
+    //printf("%s: exit(%d)\n",cur->name,-1);
+  //}
 
 
 }
@@ -351,6 +380,7 @@ load(const char *cmdline, void (**eip)(void), void **esp) {
   char *token;
   char *str1;
   int j = 0;
+  bool fail=false;
   //This first loop checks the number of arguements
   //so we can push argc to the stack
   for (j = 0, str1 = cmdline;; j++, str1 = NULL) {
@@ -379,6 +409,7 @@ load(const char *cmdline, void (**eip)(void), void **esp) {
   file = filesys_open(argv[0]);
   if (file == NULL) {
     printf("load: %s: open failed\n", argv[0]);
+    return false;
     goto done;
   }
 
@@ -392,6 +423,7 @@ load(const char *cmdline, void (**eip)(void), void **esp) {
       || ehdr.e_phentsize != sizeof(struct Elf32_Phdr)
       || ehdr.e_phnum > 1024) {
     printf("load: %s: error loading executable\n", argv[0]);
+    return false;
     goto done;
   }
 
@@ -457,7 +489,11 @@ load(const char *cmdline, void (**eip)(void), void **esp) {
   success = true;
 
   done:
-  palloc_free_page(argv);
+  if(fail){
+    thread_current()->exit_status=-1;
+    return false;
+  }
+  //palloc_free_page(argv);
 
   /* We arrive here whether the load is successful or not. */
   file_close(file);
