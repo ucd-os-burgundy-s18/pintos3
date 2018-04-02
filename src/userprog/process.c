@@ -61,12 +61,14 @@ process_execute(const char *file_name) {
   //This first loop checks the number of arguements
   //so we can push argc to the stack
   str1 = fn_copy;
-  //for (j = 0, str1 = fn_copy;; j++, str1 = NULL) {
+
   token = strtok_r(str1, " ", &cur_arguement);
   strlcpy(program_name, token, 128);
   strlcpy(fn_copy, file_name, 128);//Strtok messes up fn_copy from file_name
 
-
+  //Everything here is static, even the stuff that gets passed to the child
+  //To ensure we dont die before them we use a semaphore to block the parent
+  //to give the child time to setup
 
   struct arguments cc;
   struct arguments *cur_args = &cc;
@@ -85,8 +87,7 @@ process_execute(const char *file_name) {
     //palloc_free_page(program_name);
     tid=-1;
   }else {
-    //printf("exited thread create\n");
-    //We lock the parent once the child is spawned
+
     sema_down(&cur_args->child_spawn_lock);
     // printf("Woke up\n");
     if(cur_args->success==false){
@@ -151,9 +152,9 @@ start_process(void *in_args) {
   list_push_back(&cur->parent->children, &cur->child_elem);
 
   //We add ourselves to the parents children list
-
+  //And unblock the parent
   sema_up(&args_struct->child_spawn_lock);
-  thread_yield();
+  thread_yield();//Once we are ready to switch to user mode we let the parent finish and cleanup first.
 
 
   /* Start the user process by simulating a return from an

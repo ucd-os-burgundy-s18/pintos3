@@ -138,8 +138,8 @@ page_fault (struct intr_frame *f)
   int value = -1;
   f->eip=f->eax;
   f->eax=-1;
-  //thread_current()->exit_status=-1;
-  // thread_exit();
+  thread_current()->exit_status=-1;
+  thread_exit();
   return;
  }
 

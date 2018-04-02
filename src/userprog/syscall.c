@@ -10,7 +10,14 @@
 
 struct lock file_lock;
 
+bool isValidAddress(void* addr){
+  if (addr != NULL && is_user_vaddr (addr))
+  {
+    return (pagedir_get_page (thread_current()->pagedir, addr) != NULL);
 
+  }
+  return false;
+}
 struct file_node {
 
     struct file* aFile;
@@ -94,18 +101,19 @@ void execSyscall(struct intr_frame *f){
   buffer_address = buffer_address * 256 + get_user(f->esp + 6);
   buffer_address = buffer_address * 256 + get_user(f->esp + 5);
   buffer_address = buffer_address * 256 + get_user(f->esp + 4);
-  char buffer[128];
 
-  //putbuf(buffer_address, 4);
+  if(!is_user_vaddr(buffer_address)){
+    exitWithError();
+  }
+  if(!isValidAddress((void*)buffer_address)){
 
-  void* sp=f->esp;
-  int i=0;
-  /*do {
-    buffer[i]=get_user((void*)buffer_address[i]);
-    ++i;
-    //printf("%c\n",buffer_address[i]);
-  }while(get_user(sp+i)!='\0');*/
- // printf(buffer);
+    exitWithError();
+  }
+
+  //printf((char*)buffer_address);
+
+  ///printf("eee\n");
+
   f->eax=process_execute(buffer_address);
 
 
@@ -122,13 +130,16 @@ void waitSyscall(struct intr_frame *f){
 
 void createsyscall(struct intr_frame *f)
 {
-  //printf("CREATING\n");
+
   unsigned long buffer_address = get_user(f->esp + 7);
   buffer_address = buffer_address * 256 + get_user(f->esp + 6);
   buffer_address = buffer_address * 256 + get_user(f->esp + 5);
   buffer_address = buffer_address * 256 + get_user(f->esp + 4);
 
-  if((*(char*)buffer_address)==0){
+  if(!isValidAddress((void*)buffer_address)){
+    exitWithError();
+  }
+  if(buffer_address==0){
     //printf("NULL FILENAME\n");
     exitWithError();
     //return;
@@ -139,7 +150,7 @@ void createsyscall(struct intr_frame *f)
   initial_size = initial_size * 256 + get_user(f->esp + 9);
   initial_size = initial_size * 256 + get_user(f->esp + 8);
 
-     //printf("Initial size is %u\n",initial_size);
+
     lock_acquire(&file_lock);
 
 
@@ -162,6 +173,9 @@ void open(struct intr_frame *f)
   buffer_address = buffer_address * 256 + get_user(f->esp + 5);
   buffer_address = buffer_address * 256 + get_user(f->esp + 4);
   //char file[128];
+  if(!isValidAddress((void*)buffer_address)){
+    exitWithError();
+  }
   char* file=(char*)buffer_address;
 
   if(file[0]=='\0') {
@@ -260,9 +274,10 @@ void readSyscall(struct intr_frame *f)
 
 
   void* buffer=(void*)buffer_address;
-  if(!is_user_vaddr(buffer)){
+  if(!isValidAddress(buffer)){
     exitWithError();
   }
+
   //if(buffer[0]=='\0'){
    // exitWithError();
   //}
@@ -334,7 +349,9 @@ void writeSyscall(struct intr_frame *f) {
   buffer_address = buffer_address * 256 + get_user(f->esp + 8);
 
   void* buffer=(void*)buffer_address;
-
+  if(!isValidAddress(buffer)){
+    exitWithError();
+  }
   if((fd<=0)||fd>thread_current()->fd){
     //f->eax=-1;
     //return;
