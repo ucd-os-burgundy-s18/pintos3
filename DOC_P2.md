@@ -1,7 +1,7 @@
 		     +--------------------------+
-       	       	|		CSCI 3453	|
-		     | PROJECT 2: USER PROGRAMS	|
-		     | 	   DESIGN DOCUMENT     	|
+       	       		CSCI 3453	
+		      PROJECT 2: USER PROGRAMS	
+		      	   DESIGN DOCUMENT     	
 		     +--------------------------+
 
 ---- GROUP ----
