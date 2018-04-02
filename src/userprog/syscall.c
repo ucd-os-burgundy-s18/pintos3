@@ -16,6 +16,7 @@ struct file_node {
     struct file* aFile;
     int fd;
     struct list_elem node;
+    tid_t owner;
 
 };
 void exitWithError(){
@@ -23,9 +24,10 @@ void exitWithError(){
   thread_exit();
 }
 void checkForBadArgs(struct intr_frame *f,int numArgs){
-  if(!is_user_vaddr(f->esp+(4*numArgs)))
-    exitWithError();
+  if(!is_user_vaddr(f->esp+(4*numArgs))) {
 
+    exitWithError();
+  }
 
 }
 
@@ -71,11 +73,14 @@ void haltSyscall(struct intr_frame *f) {
 void exitSyscall(struct intr_frame *f){
   checkForBadArgs(f,1);
   int value = get_user(f->esp + 4);
-  if(is_user_vaddr(f->esp + 4))
-  //printf("VALUE IS %i\n",value);
-  //f->eax=value;
-  thread_current()->exit_status=value;
-  thread_exit();
+  if(is_user_vaddr(f->esp + 4)) {
+    //printf("VALUE IS %i\n", value);
+
+    thread_current()->exit_status = value;
+    thread_exit();
+  }else{
+    exitWithError();
+  }
 }
 
 void execSyscall(struct intr_frame *f){
@@ -111,38 +116,7 @@ void waitSyscall(struct intr_frame *f){
   f->eax=process_wait(id);
 }
 
-void writeSyscall(struct intr_frame *f) {
-  void *sp = f->esp;
-  int mode = get_user(sp + 4);
-  int len = get_user(sp + 12);
-  /*
-  printf("len = %i\n", len);
-  printf("mode = %i\n", mode);
-  printf("buffer address1 = '%p'\n", get_user(sp + 8));
-  printf("buffer address2 = '%p'\n", get_user(sp + 9));
-  printf("buffer address3 = '%p'\n", get_user(sp + 10));
-  printf("buffer address4 = '%p'\n", get_user(sp + 11));
-  printf("bottom of page '%p'\n", pg_round_down(sp));
-  */
-  void *page_start = pg_round_down(sp);
-  char *start_of_buffer = page_start + get_user(sp + 8);
-  //printf("Buffer start address: '%p'\n", start_of_buffer);
-  char buffer[2048];
-  unsigned long buffer_address = get_user(sp + 11);
-  buffer_address = buffer_address * 256 + get_user(sp + 10);
-  buffer_address = buffer_address * 256 + get_user(sp + 9);
-  buffer_address = buffer_address * 256 + get_user(sp + 8);
-  //printf("Buffer address is '%p'\n", buffer_address);
 
-  //hex_dump (page_start,buffer, 2048, true);
-  //printf(get_user(start_of_buffer));
-  if (mode == 1) {
-    putbuf(buffer_address, len);
-
-    f->eax=len;
-  }
-
-}
 
 
 
@@ -154,13 +128,18 @@ void createsyscall(struct intr_frame *f)
   buffer_address = buffer_address * 256 + get_user(f->esp + 5);
   buffer_address = buffer_address * 256 + get_user(f->esp + 4);
 
-  int initial_size=get_user(f->esp + 9);
-  if(((char*)buffer_address)[0]=='\0'){
+  if((*(char*)buffer_address)==0){
     //printf("NULL FILENAME\n");
     exitWithError();
     //return;
   }else {
-    // printf("Initial size is %i\n",initial_size);
+
+  unsigned long initial_size = get_user(f->esp + 11);
+  initial_size = initial_size * 256 + get_user(f->esp + 10);
+  initial_size = initial_size * 256 + get_user(f->esp + 9);
+  initial_size = initial_size * 256 + get_user(f->esp + 8);
+
+     //printf("Initial size is %u\n",initial_size);
     lock_acquire(&file_lock);
 
 
@@ -177,6 +156,7 @@ void createsyscall(struct intr_frame *f)
 
 void open(struct intr_frame *f)
 {
+
   unsigned long buffer_address = get_user(f->esp + 7);
   buffer_address = buffer_address * 256 + get_user(f->esp + 6);
   buffer_address = buffer_address * 256 + get_user(f->esp + 5);
@@ -189,7 +169,13 @@ void open(struct intr_frame *f)
     f->eax=-1;
     return;
   }
+  struct file_node* a_node = (struct file_node*)malloc(sizeof(struct file_node));
+  if(!a_node){
+    f->eax=-1;
+    lock_release(&file_lock);
 
+    return;
+  }
   lock_acquire(&file_lock);
   struct file *afile = filesys_open(file);
 
@@ -201,10 +187,11 @@ void open(struct intr_frame *f)
     return;
   }
 
-  struct file_node* a_node = malloc(sizeof(struct file_node));
+
 
   a_node->aFile = afile;
   a_node->fd = thread_current()->fd;
+  a_node->owner=thread_current()->tid;
   thread_current()->fd++;
 
   list_push_back(&thread_current()->fileList, &a_node->node);
@@ -233,7 +220,9 @@ void closeSyscall(struct intr_frame *f) {
       file_close(F->aFile);
       list_remove(&F->node);
       free(F);
+
     }
+
   } else {
     for (e = list_begin(f_list); e != list_end(f_list); e = list_next(f_list)) {
       struct file_node *F = list_entry(e,
@@ -256,8 +245,11 @@ void readSyscall(struct intr_frame *f)
   //int readSyscall(int fd, void* buffer, unsigned size)
 
   int fd = get_user(f->esp + 4);
-  unsigned size = get_user(f->esp + 12);
-
+  unsigned size = get_user(f->esp + 15);
+  size =size*256+ get_user(f->esp + 14);
+  size =size*256+ get_user(f->esp + 13);
+  size =size*256+ get_user(f->esp + 12);
+  //printf("Reading size %i\n",size);
 
   //printf("Buffer start address: '%p'\n", start_of_buffer);
 
@@ -266,9 +258,21 @@ void readSyscall(struct intr_frame *f)
   buffer_address = buffer_address * 256 + get_user(f->esp + 9);
   buffer_address = buffer_address * 256 + get_user(f->esp + 8);
 
+
   void* buffer=(void*)buffer_address;
+  if(!is_user_vaddr(buffer)){
+    exitWithError();
+  }
+  //if(buffer[0]=='\0'){
+   // exitWithError();
+  //}
+
   //putbuf((char*)buffer,11);
-  if(fd==1){
+  if(fd<2){
+    f->eax=-1;
+    return;
+  }
+  if(fd>thread_current()->fd){
     f->eax=-1;
     return;
   }
@@ -287,13 +291,8 @@ void readSyscall(struct intr_frame *f)
   }
 
   lock_acquire(&file_lock);
-
-
-
-
   struct file_node *F=get_file_node(fd);
 
-  ASSERT((fd==F->fd));
 
 
 
@@ -303,8 +302,9 @@ void readSyscall(struct intr_frame *f)
   {
 
     lock_release(&file_lock);
-
-    return -1;
+    printf("BADD FILE\n");
+    f->eax=-1;
+    return;
   }
   //printf("Got file\n");
   int num_bytes = file_read(aFile, buffer, size);
@@ -316,11 +316,83 @@ void readSyscall(struct intr_frame *f)
 
 }
 
+void writeSyscall(struct intr_frame *f) {
+  //Getting arguements from stack
+  int fd = get_user(f->esp + 4);
 
-  
-void seeksyscall(int fd, unsigned position)
+  //unsigned size = get_user(f->esp + 12);
+  unsigned size = get_user(f->esp + 15);
+  size =size*256+ get_user(f->esp + 14);
+  size =size*256+ get_user(f->esp + 13);
+  size =size*256+ get_user(f->esp + 12);
+
+  //printf("Buffer start address: '%p'\n", start_of_buffer);
+
+  unsigned long buffer_address = get_user(f->esp + 11);
+  buffer_address = buffer_address * 256 + get_user(f->esp + 10);
+  buffer_address = buffer_address * 256 + get_user(f->esp + 9);
+  buffer_address = buffer_address * 256 + get_user(f->esp + 8);
+
+  void* buffer=(void*)buffer_address;
+
+  if((fd<=0)||fd>thread_current()->fd){
+    //f->eax=-1;
+    //return;
+    exitWithError();
+  }
+  if (fd == 1) {
+    putbuf(buffer_address, size);
+
+    f->eax=size;
+    return;
+  }
+//printf("FD=%i\n",fd);
+  if(fd<1||fd>thread_current()->fd){
+    //Checks for invalid fd's
+    //printf("FAIL\n");
+    exitWithError();
+  }
+
+  lock_acquire(&file_lock);
+  struct file_node *F=get_file_node(fd);
+
+
+
+
+  ASSERT(F->fd==fd);
+
+  struct file *aFile = F->aFile;
+
+  if(!aFile)
+  {
+
+    lock_release(&file_lock);
+    printf("BADD FILE\n");
+    f->eax=-1;
+    return;
+  }
+
+  //writing to the file itself
+
+  int num_bytes = file_write (aFile, buffer,size);
+
+  //After we write to the file we release the lock and
+  //Setup our interupt frame to return to the user
+  lock_release(&file_lock);
+  f->eax=num_bytes;
+  return;
+
+}
+
+//void seeksyscall(int fd, unsigned position)
+void seeksyscall(struct intr_frame *f)
 {
+  int fd=get_user(f->esp + 4);
 
+  unsigned position = get_user(f->esp + 11);
+  position =position*256+ get_user(f->esp + 10);
+  position =position*256+ get_user(f->esp + 9);
+  position =position*256+ get_user(f->esp + 8);
   lock_acquire(&file_lock);
 
   struct list_elem *e;
@@ -342,7 +414,8 @@ void seeksyscall(int fd, unsigned position)
   if(!aFile)
   {
     lock_release(&file_lock);
-    return -1;
+    //f->eax=-1;
+    return;
   }
 
   file_seek(aFile, position);
@@ -353,8 +426,17 @@ void seeksyscall(int fd, unsigned position)
 
 
 
-bool removesyscall(const char* file)
+//bool removesyscall(const char* file)
+bool removesyscall(struct intr_frame *f)
 {
+
+  unsigned long buffer_address = get_user(f->esp + 7);
+  buffer_address = buffer_address * 256 + get_user(f->esp + 6);
+  buffer_address = buffer_address * 256 + get_user(f->esp + 5);
+  buffer_address = buffer_address * 256 + get_user(f->esp + 4);
+  //char file[128];
+  char* file=(char*)buffer_address;
+
   lock_acquire(&file_lock);
 
   bool check = filesys_remove(file);
@@ -401,23 +483,25 @@ static void
 syscall_handler(struct intr_frame *f) {
   /*SYSCALL LIST*/
 
+
   int (*p[14]) (void* sp);
   p[0]=haltSyscall;
   p[1]=exitSyscall;
   p[2]=execSyscall;
   p[3]=waitSyscall;
   p[4]=createsyscall;//Create
-  p[5]=placeHolderSyscall;//Remove
+  p[5]=removesyscall;//Remove
   p[6]=open;//Open
   p[7]=filesizesyscall;//Filesize
   p[8]=readSyscall;//Read
   p[9]=writeSyscall;      //Write
-  p[10]=placeHolderSyscall;//seek
+  p[10]=seeksyscall;//seek
   p[11]=placeHolderSyscall;//tell
   p[12]=closeSyscall;//close
 
 
   void *stack_pointer = f->esp;
+
   //printf("Address is '%p'\n", stack_pointer);
   //printf("PHYS_BASE is '%p'\n", PHYS_BASE);
 

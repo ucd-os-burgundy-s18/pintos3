@@ -30,24 +30,26 @@ static bool load(const char *cmdline, void (**eip)(void), void **esp);
    thread id, or TID_ERROR if the thread cannot be created. */
 
 
+
+
 tid_t
 process_execute(const char *file_name) {
   if (strlen(file_name) >= 128) {
     return TID_ERROR;
   }
-  char *fn_copy;
+  char fn_copy[128];
   //char* fn_args;
-  char *program_name;
+  char program_name[128];
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
-  fn_copy = palloc_get_page(0);
+
   //fn_args=palloc_get_page(0);
-  program_name = palloc_get_page(0);
+
   if (fn_copy == NULL)
     return TID_ERROR;
-  strlcpy(fn_copy, file_name, PGSIZE);
+  strlcpy(fn_copy, file_name, 128);
   //printf("Input is '%s'\n", fn_copy);
   struct thread* cur=thread_current();
 
@@ -61,13 +63,13 @@ process_execute(const char *file_name) {
   str1 = fn_copy;
   //for (j = 0, str1 = fn_copy;; j++, str1 = NULL) {
   token = strtok_r(str1, " ", &cur_arguement);
-  strlcpy(program_name, token, PGSIZE);
-  strlcpy(fn_copy, file_name, PGSIZE);//Strtok messes up fn_copy from file_name
+  strlcpy(program_name, token, 128);
+  strlcpy(fn_copy, file_name, 128);//Strtok messes up fn_copy from file_name
 
 
 
-
-  struct arguments *cur_args = palloc_get_page(0);
+  struct arguments cc;
+  struct arguments *cur_args = &cc;
   cur_args->parent = thread_current();
   cur_args->args = fn_copy;
 
@@ -79,19 +81,20 @@ process_execute(const char *file_name) {
   tid = thread_create(program_name, PRI_DEFAULT, start_process, cur_args);
 
   if (tid == TID_ERROR) {
-    palloc_free_page(fn_copy);
-    palloc_free_page(program_name);
+    //palloc_free_page(fn_copy);
+    //palloc_free_page(program_name);
     tid=-1;
   }else {
     //printf("exited thread create\n");
     //We lock the parent once the child is spawned
     sema_down(&cur_args->child_spawn_lock);
-   // printf("Woke up\n");
+    // printf("Woke up\n");
     if(cur_args->success==false){
       tid=-1;
       //printf("BOGAS\n");
     }
-    palloc_free_page(cur_args);
+    //free(cur_args->args);
+    //free(cur_args);
 
     //printf("Exited sema down\n");
   }
@@ -120,7 +123,7 @@ start_process(void *in_args) {
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load(args_struct->args, &if_.eip, &if_.esp);
 
-  palloc_free_page(args_struct->args);//We clear out the textual arguements to save spac
+  //palloc_free_page(args_struct->args);//We clear out the textual arguements to save spac
   args_struct->args=NULL;
   /* If load failed, quit. */
 
@@ -236,10 +239,14 @@ process_exit(void) {
 
   struct thread *cur = thread_current();
   uint32_t *pd;
-  if(!cur->failed_to_spawn){
-  printf("%s: exit(%d)\n",cur->name,cur->exit_status);
-  /* Destroy the current process's page directory and switch back
-     to the kernel-only page directory. */
+  if(!cur->failed_to_spawn) {
+    printf("%s: exit(%d)\n", cur->name, cur->exit_status);
+    enum intr_level old_level;
+
+
+    old_level = intr_disable ();
+    /* Destroy the current process's page directory and switch back
+       to the kernel-only page directory. */
 
     pd = cur->pagedir;
     if (pd != NULL) {
@@ -257,25 +264,49 @@ process_exit(void) {
     /*We remove ourselves from our parents children list, and wake up the parent
      *if they are waiting on us we wake them up
      */
+    if (cur->exe != NULL) {
+      //printf("UNLOCKIGN EXE\n");
+      file_allow_write(cur->exe);
+      file_close(cur->exe);
 
+      cur->exe = NULL;
+    }
 
     struct thread *t;
-    struct thread *parent = &cur->parent;
+    if (&cur->parent) {
+      struct thread *parent = &cur->parent;
 
 
-    if (!list_empty(&cur->parent->children)) {
+      if (!list_empty(&cur->parent->children)) {
 
-      list_remove(&cur->child_elem);
+        list_remove(&cur->child_elem);
 
+      }
+      if (cur->p_waiter != NULL) {
+
+        cur->p_waiter->exit_code = cur->exit_status;
+        sema_up(&cur->p_waiter->blocker);
+
+      }
     }
-    if (cur->p_waiter != NULL) {
+    if(!list_empty(&cur->children)){
+      printf("ENTERED SEARCH1\n");
+      struct list_elem* e;
+      struct thread* child=NULL;
 
-      cur->p_waiter->exit_code = cur->exit_status;
-      sema_up(&cur->p_waiter->blocker);
 
+      for (e = list_begin(&cur->children); e != list_end(&cur->children); e = list_next(e)) {
+        //printf("ENTERED SEARCH1\n");
+        child = list_entry(e,struct thread, child_elem);
+        child->parent=NULL;
+
+
+      }
     }
+
+    intr_set_level (old_level);
   }//else{
-    //printf("%s: exit(%d)\n",cur->name,-1);
+
   //}
 
 
@@ -395,6 +426,7 @@ load(const char *cmdline, void (**eip)(void), void **esp) {
   struct thread *t = thread_current();
   struct Elf32_Ehdr ehdr;
   struct file *file = NULL;
+
   off_t file_ofs;
   bool success = false;
   int i;
@@ -409,9 +441,11 @@ load(const char *cmdline, void (**eip)(void), void **esp) {
   file = filesys_open(argv[0]);
   if (file == NULL) {
     printf("load: %s: open failed\n", argv[0]);
+
     return false;
     goto done;
   }
+  file_deny_write(file);
 
 
   /* Read and verify executable header. */
@@ -423,6 +457,7 @@ load(const char *cmdline, void (**eip)(void), void **esp) {
       || ehdr.e_phentsize != sizeof(struct Elf32_Phdr)
       || ehdr.e_phnum > 1024) {
     printf("load: %s: error loading executable\n", argv[0]);
+    file_allow_write(file);
     return false;
     goto done;
   }
@@ -490,13 +525,14 @@ load(const char *cmdline, void (**eip)(void), void **esp) {
 
   done:
   if(fail){
+    file_allow_write(file);
     thread_current()->exit_status=-1;
     return false;
   }
   //palloc_free_page(argv);
-
+  thread_current()->exe=file;
   /* We arrive here whether the load is successful or not. */
-  file_close(file);
+
   return success;
 }
 

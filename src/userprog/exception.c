@@ -101,6 +101,7 @@ kill (struct intr_frame *f)
       kernel. */
    printf ("Interrupt %#04x (%s) in unknown segment %04x\n",
            f->vec_no, intr_name (f->vec_no), f->cs);
+
    thread_exit ();
  }
 }
@@ -132,12 +133,13 @@ page_fault (struct intr_frame *f)
     (#PF)". */
  asm ("movl %%cr2, %0" : "=r" (fault_addr));
  user = (f->error_code & PF_U) != 0;
- if(user) {
+ if(!user) {
   //printf("SEGFAULT!\n");
   int value = -1;
   f->eip=f->eax;
   f->eax=-1;
-
+  //thread_current()->exit_status=-1;
+  // thread_exit();
   return;
  }
 
@@ -153,11 +155,12 @@ page_fault (struct intr_frame *f)
  not_present = (f->error_code & PF_P) == 0;
  write = (f->error_code & PF_W) != 0;
  thread_current()->exit_status=-1;
+  /*
  printf ("Page fault at %p: %s error %s page in %s context.\n",
          fault_addr,
          not_present ? "not present" : "rights violation",
          write ? "writing" : "reading",
-         user ? "user" : "kernel");
+         user ? "user" : "kernel");*/
  thread_exit();
 
  /* To implement virtual memory, delete the rest of the function

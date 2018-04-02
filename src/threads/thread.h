@@ -105,6 +105,7 @@ struct thread
     tid_t p_waiting_on;
     int exit_status;
     struct list fileList;
+    struct file* exe;
     struct list_elem child_elem;
     bool failed_to_spawn;
     int child_exit_status;
