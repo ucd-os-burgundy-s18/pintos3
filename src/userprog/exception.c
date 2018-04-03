@@ -101,6 +101,7 @@ kill (struct intr_frame *f)
       kernel. */
    printf ("Interrupt %#04x (%s) in unknown segment %04x\n",
            f->vec_no, intr_name (f->vec_no), f->cs);
+
    thread_exit ();
  }
 }
@@ -130,23 +131,18 @@ page_fault (struct intr_frame *f)
     See [IA32-v2a] "MOV--Move to/from Control Registers" and
     [IA32-v3a] 5.15 "Interrupt 14--Page Fault Exception
     (#PF)". */
- register int *EAX asm ("eax");
+ asm ("movl %%cr2, %0" : "=r" (fault_addr));
  user = (f->error_code & PF_U) != 0;
  if(!user) {
-  printf("Value of EAX is '%i'\n", EAX);
-  //int value = -1;
-  asm volatile( "movl %0, %%eax"
-  :
-  : "b" (-1)
-  : "eax"
-  );
-  asm volatile( "jmp %0"
-  :
-  : "b" (EAX)
-  );
+  //printf("SEGFAULT!\n");
+  int value = -1;
+  f->eip=f->eax;
+  f->eax=-1;
+  thread_current()->exit_status=-1;
+  thread_exit();
+  return;
  }
 
- asm ("movl %%cr2, %0" : "=r" (fault_addr));
 
  /* Turn interrupts back on (they were only off so that we could
     be assured of reading CR2 before it changed). */
@@ -158,15 +154,18 @@ page_fault (struct intr_frame *f)
  /* Determine cause. */
  not_present = (f->error_code & PF_P) == 0;
  write = (f->error_code & PF_W) != 0;
-
-
- /* To implement virtual memory, delete the rest of the function
-    body, and replace it with code that brings in the page to
-    which fault_addr refers. */
+ thread_current()->exit_status=-1;
+  /*
  printf ("Page fault at %p: %s error %s page in %s context.\n",
          fault_addr,
          not_present ? "not present" : "rights violation",
          write ? "writing" : "reading",
-         user ? "user" : "kernel");
- kill (f);
+         user ? "user" : "kernel");*/
+ thread_exit();
+
+ /* To implement virtual memory, delete the rest of the function
+    body, and replace it with code that brings in the page to
+    which fault_addr refers.*/
+
+ //kill (f);
 }
