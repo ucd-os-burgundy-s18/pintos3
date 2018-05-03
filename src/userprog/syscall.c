@@ -13,6 +13,7 @@ struct lock file_lock;
 bool isValidAddress(void* addr){
   if (addr != NULL && is_user_vaddr (addr))
   {
+
     return (pagedir_get_page (thread_current()->pagedir, addr) != NULL);
 
   }
@@ -275,6 +276,7 @@ void readSyscall(struct intr_frame *f)
 
   void* buffer=(void*)buffer_address;
   if(!isValidAddress(buffer)){
+    //printf("Invalid address!\n");
     exitWithError();
   }
 

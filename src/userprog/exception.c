@@ -1,10 +1,13 @@
 #include "userprog/exception.h"
 #include <inttypes.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "userprog/gdt.h"
 #include "threads/interrupt.h"
 #include "threads/thread.h"
-
+#include "threads/palloc.h"
+#include "threads/vaddr.h"
+#include "userprog/process.h"
 /* Number of page faults processed. */
 static long long page_fault_cnt;
 
@@ -119,11 +122,101 @@ kill (struct intr_frame *f)
 static void
 page_fault (struct intr_frame *f)
 {
+  bool not_present;  /* True: not-present page, false: writing r/o page. */
+  bool write;        /* True: access was write, false: access was read. */
+  bool user;         /* True: access by user, false: access by kernel. */
+  void *fault_addr;  /* Fault address. */
+  bool success=true;
+  void* fault_addr_down;
+  //printf("AAAAAA\n");
+
+/* Obtain faulting address, the virtual address that was
+   accessed to cause the fault.  It may point to code or to
+   data.  It is not necessarily the address of the instruction
+   that caused the fault (that's f->eip).
+   See [IA32-v2a] "MOV--Move to/from Control Registers" and
+   [IA32-v3a] 5.15 "Interrupt 14--Page Fault Exception
+   (#PF)". */
+  asm ("movl %%cr2, %0" : "=r" (fault_addr));
+  user = (f->error_code & PF_U) != 0;
+  if(!user) {
+    //printf("SEGFAULT!\n");
+    int value = -1;
+    f->eip=f->eax;
+    f->eax=-1;
+    thread_current()->exit_status=-1;
+    //printf("sanichole");
+    thread_exit();
+    return;
+  }
+
+
+/* Turn interrupts back on (they were only off so that we could
+   be assured of reading CR2 before it changed). */
+  intr_enable ();
+
+/* Count page faults. */
+  page_fault_cnt++;
+  //success=true;
+  //printf("esp is %p\n",f->esp);
+  //printf("esp+32 is %p\n",f->esp+32);
+  //printf("Falt_addr is %p\n",fault_addr);
+  //fault_addr_down=pg_round_down(fault_addr);
+  //printf("Falt_addr_down is %p\n",fault_addr);
+  //printf("PHYS_BASE IS %p\n",PHYS_BASE);
+  if(fault_addr == NULL || fault_addr >= PHYS_BASE || fault_addr < 0x08048000){
+    success = false;
+    //printf("malasis\n");
+  }
+  else if(fault_addr > (f->esp+32) ||fault_addr < (f->esp-32))
+  {
+
+    //printf("get_user Failing\n");
+    success = false;
+  }
+  //printf("WHY?\n");
+  if(success)
+  {
+    //printf("poop");
+    void* upage = pg_round_down(fault_addr);
+    void* kpage = (void*)palloc_get_page(PAL_USER);
+    bool writable = true;
+    //bool correct = install_page(upage, kpage, writable);
+    struct thread* t = thread_current();
+    bool correct= (pagedir_get_page(t->pagedir, upage) == NULL
+                   && pagedir_set_page(t->pagedir, upage, kpage, writable));
+    //printf("IS IT CORRECT??? %i\n",correct);
+    return;
+  }
+
+/* Determine cause. */
+  not_present = (f->error_code & PF_P) == 0;
+  write = (f->error_code & PF_W) != 0;
+  thread_current()->exit_status=-1;
+  thread_exit();
+  /*
+ printf ("Page fault at %p: %s error %s page in %s context.\n",
+         fault_addr,
+         not_present ? "not present" : "rights violation",
+         write ? "writing" : "reading",
+         user ? "user" : "kernel");*/
+
+
+/* To implement virtual memory, delete the rest of the function
+   body, and replace it with code that brings in the page to
+   which fault_addr refers.*/
+
+//kill (f);
+}
+
+static void
+page_fault_old (struct intr_frame *f)
+{
  bool not_present;  /* True: not-present page, false: writing r/o page. */
  bool write;        /* True: access was write, false: access was read. */
  bool user;         /* True: access by user, false: access by kernel. */
  void *fault_addr;  /* Fault address. */
-
+ printf("AAAAAA\n");
  /* Obtain faulting address, the virtual address that was
     accessed to cause the fault.  It may point to code or to
     data.  It is not necessarily the address of the instruction

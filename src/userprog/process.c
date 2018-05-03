@@ -243,7 +243,7 @@ process_exit(void) {
   if(!cur->failed_to_spawn) {
     printf("%s: exit(%d)\n", cur->name, cur->exit_status);
     enum intr_level old_level;
-
+    //printf("afhkjahfjkafa\n");
 
     old_level = intr_disable ();
     /* Destroy the current process's page directory and switch back
@@ -272,9 +272,10 @@ process_exit(void) {
 
       cur->exe = NULL;
     }
-
+    //printf("Is it even working???\n");
     struct thread *t;
     if (&cur->parent) {
+      //printf("Thread has parrent\n");
       struct thread *parent = &cur->parent;
 
 
@@ -291,7 +292,7 @@ process_exit(void) {
       }
     }
     if(!list_empty(&cur->children)){
-      printf("ENTERED SEARCH1\n");
+      //printf("ENTERED SEARCH1\n");
       struct list_elem* e;
       struct thread* child=NULL;
 
