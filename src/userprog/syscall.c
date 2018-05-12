@@ -8,7 +8,7 @@
 #include "threads/init.h"
 #include "userprog/pagedir.h"
 
-struct lock file_lock;
+
 
 bool isValidAddress(void* addr){
   if (addr != NULL && is_user_vaddr (addr))

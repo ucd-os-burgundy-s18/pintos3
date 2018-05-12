@@ -17,10 +17,10 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "vm/page.h"
+#include "vm/frame.h"
 
-
-static thread_func start_process
-NO_RETURN;
+static thread_func start_process NO_RETURN;
 
 static bool load(const char *cmdline, void (**eip)(void), void **esp);
 
@@ -668,16 +668,19 @@ void push(void *kpage, unsigned int *ofs, void *buffer, size_t size) {
 static bool
 setup_stack(void **esp, int argc, char **argv) {
   //printf("Setting up stack\n");
+  /*OLD METHOD THAT USED INSTALL PAGE
   uint8_t *kpage;
   uint8_t *upage;
   bool success = false;
   uint32_t addresses[argc + 1];//When pushing arguements we save their addresses;
+
   kpage = palloc_get_page(PAL_USER | PAL_ZERO);
 
   if (kpage != NULL) {
     upage = ((uint8_t *) PHYS_BASE) - PGSIZE;
     success = install_page(upage, kpage, true);
 
+    //success=fAlloc()
     if (success) {
 
 
@@ -686,9 +689,11 @@ setup_stack(void **esp, int argc, char **argv) {
       //*esp = PHYS_BASE - 12;
     } else {
       palloc_free_page(kpage);
+      return;
     }
-  }
-
+  }*/
+  bool success = false;
+  uint32_t addresses[argc + 1];//When pushing arguements we save their addresses;
 
   unsigned int ofs = PGSIZE;
   // - sizeof(uint8_t);
@@ -767,12 +772,13 @@ setup_stack(void **esp, int argc, char **argv) {
    with palloc_get_page().
    Returns true on success, false if UPAGE is already mapped or
    if memory allocation fails. */
+
 static bool
 install_page(void *upage, void *kpage, bool writable) {
   struct thread *t = thread_current();
 
-  /* Verify that there's not already a page at that virtual
-     address, then map our page there. */
+  // Verify that there's not already a page at that virtual
+  //   address, then map our page there.
   return (pagedir_get_page(t->pagedir, upage) == NULL
           && pagedir_set_page(t->pagedir, upage, kpage, writable));
 }
