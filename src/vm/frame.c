@@ -7,7 +7,7 @@
 #include "userprog/syscall.h"
 #include "vm/frame.h"
 #include "vm/page.h"
-#include "vm/swap.h"
+
 
 void initialize_frame_table(void){
   list_init(&global_frame_table);
@@ -37,9 +37,9 @@ void * try_evict(frame* victim,int flag){
           lock_release(&file_lock);
         }else{
           //If its a swap frame then we can swap it out
-          page_table->for_swap=true;
-          //page_table->swap_id=swap_page_out(victim->frame);
           //TODO implement swap_page_out
+          PANIC("OH NO I DONT KNOW HOW TO SWAP YET PLEASE HALP ME!!!!");
+
         }
 
       }
@@ -61,7 +61,7 @@ struct frame_entry* fAlloc(struct page* curPage,int flags){
   void* new_frame=palloc_get_page(flag);
   lock_aquire(&global_frame_lock);
   while(!new_frame){
-
+    print("DEBUG: palloc failed, attempting to evict\n");
     struct list_elem *e=list_begin(&global_frame_table);
 
     while(true) {

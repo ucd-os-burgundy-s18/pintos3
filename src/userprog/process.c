@@ -17,8 +17,9 @@
 #include "threads/palloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
-#include "vm/page.h"
 #include "vm/frame.h"
+#include "vm/page.h"
+
 
 static thread_func start_process NO_RETURN;
 
@@ -692,7 +693,12 @@ setup_stack(void **esp, int argc, char **argv) {
       return;
     }
   }*/
-  bool success = false;
+  bool success = extend_stack(((uint8_t *) PHYS_BASE) - PGSIZE);
+  uint8_t * kpage=pg_round_down(((uint8_t *) PHYS_BASE) - PGSIZE);
+  if(!success){
+    return false;
+  }
+  *esp = PHYS_BASE;
   uint32_t addresses[argc + 1];//When pushing arguements we save their addresses;
 
   unsigned int ofs = PGSIZE;

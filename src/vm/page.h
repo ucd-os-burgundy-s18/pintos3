@@ -7,12 +7,13 @@
 #include <stdbool.h>
 #include <stdint.h>
 struct sup_page_table_entry{
-    unit32_t* user_vaddr;
+    uint32_t* user_vaddr;
 
     bool for_swap;
     bool for_mmap;
     bool is_loaded;
     bool is_pinned;
+    bool is_writable;
     size_t swap_id;
     struct list_elem elem;
 
@@ -24,18 +25,16 @@ struct sup_page_table_entry{
 
 
 };
+bool extend_stack(void* user_vaddr);
 
 struct sup_page_table_entry* get_pte_from_user(void* user_vaddr);
-void initialize_page_table(struct list* table);
-void delete_page_table(struct list* table);
-
 bool page_load(struct sup_page_table_entry* pt);
 bool mmap_load(struct sup_page_table_entry* pt);
 bool swap_load(struct sup_page_table_entry* pt);
 bool file_load(struct sup_page_table_entry* pt);
 bool pt_add_file(struct file* file,int32_t offset,uint8_t * upage,uint32_t file_read_bytes,uint32_t file_zero_bytes);
 bool pt_add_mmap(struct file* file,int32_t offset,uint8_t * upage,uint32_t file_read_bytes,uint32_t file_zero_bytes);
-bool extend_stack(void* user_vaddr);
+
 
 
 

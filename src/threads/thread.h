@@ -94,7 +94,9 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
-
+    struct list page_list;              /* List for the page table for the thread, yeah I know a hash table would have
+                                           been better but I was too short on time to learn the hash table implementation
+                                           in pintos*/
 
     struct list munmaps;
     int mapid;
