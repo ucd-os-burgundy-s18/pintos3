@@ -3,6 +3,8 @@
 
 #include "threads/thread.h"
 #include "threads/synch.h"
+#include "vm/frame.h"
+#include "vm/page.h"
 tid_t process_execute (const char *file_name);
 struct thread* find_by_tid(tid_t tid,struct thread* cur);
 int process_wait (tid_t);

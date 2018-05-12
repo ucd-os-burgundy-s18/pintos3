@@ -620,19 +620,14 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
     size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
     /* Get a page of memory. */
-    uint8_t *kpage = palloc_get_page(PAL_USER);
-    if (kpage == NULL)
-      return false;
+    //uint8_t *kpage = palloc_get_page(PAL_USER);
+
 
     /* Load this page. */
-    if (file_read(file, kpage, page_read_bytes) != (int) page_read_bytes) {
-      palloc_free_page(kpage);
-      return false;
-    }
-    memset(kpage + page_read_bytes, 0, page_zero_bytes);
+
 
     /* Add the page to the process's address space. */
-    if (!install_page(upage, kpage, writable)) {
+    if (!pt_add_file(file, ofs, upage, page_read_bytes, page_zero_bytes, writable)) {
       palloc_free_page(kpage);
       return false;
     }
@@ -679,7 +674,7 @@ setup_stack(void **esp, int argc, char **argv) {
 
   if (kpage != NULL) {
     upage = ((uint8_t *) PHYS_BASE) - PGSIZE;
-    success = install_page(upage, kpage, true);
+    success = install_page1(upage, kpage, true);
 
     //success=fAlloc()
     if (success) {
@@ -692,13 +687,18 @@ setup_stack(void **esp, int argc, char **argv) {
       palloc_free_page(kpage);
       return;
     }
-  }*/
+  }
+  */
+  printf("Extending stack\n");
   bool success = extend_stack(((uint8_t *) PHYS_BASE) - PGSIZE);
+  printf("Done\n");
   uint8_t * kpage=pg_round_down(((uint8_t *) PHYS_BASE) - PGSIZE);
   if(!success){
     return false;
   }
+
   *esp = PHYS_BASE;
+
   uint32_t addresses[argc + 1];//When pushing arguements we save their addresses;
 
   unsigned int ofs = PGSIZE;
