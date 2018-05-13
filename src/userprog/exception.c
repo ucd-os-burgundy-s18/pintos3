@@ -240,7 +240,7 @@ page_fault (struct intr_frame *f)
           //printf("Stack extended\n");
           return;
         }
-        printf("BOGASHOLE\n");
+        //printf("BOGASHOLE\n");
         thread_current()->exit_status=-1;
         thread_exit();
       }
@@ -254,8 +254,8 @@ page_fault (struct intr_frame *f)
     success = false;
 
 
-    printf("Falt_addr is now %p\n", fault_addr);
-    printf("did not fidn it\n");
+    //printf("Falt_addr is now %p\n", fault_addr);
+    //printf("did not fidn it\n");
     if (extend_stack(fault_addr)) {
 
       return;
@@ -275,7 +275,7 @@ page_fault (struct intr_frame *f)
 
 
 
- // printf("DEBUG: Killing thread with fault address\n");
+  printf("DEBUG: Killing thread with fault address\n");
 
 
 

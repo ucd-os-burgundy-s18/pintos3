@@ -40,7 +40,7 @@ bool extend_stack(void* user_vaddr){
   //ASSERT(user_vaddr==pg_round_down(user_vaddr));
 
   if ( (size_t) (PHYS_BASE - pg_round_down(user_vaddr)) > (1 << 23)) {
-    printf("DKJADHKJAAD\n");
+    //printf("DKJADHKJAAD\n");
     return false;
   }
   //printf("DEBUG: EXTENDING STACK\n");
@@ -118,7 +118,7 @@ void setFile(struct sup_page_table_entry* page,struct file* file,int32_t offset,
   page->is_loaded=false;
   page->is_pinned=false;
 }
-//TODO: implement these fuckers
+
 
 bool pt_add_file(struct file* file,int32_t offset,uint8_t * upage,uint32_t file_read_bytes,uint32_t file_zero_bytes,bool writible,size_t debug){
   //printf("DEBUG: %p is set to lazily load a file when accesed\n",upage);

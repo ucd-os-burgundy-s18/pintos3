@@ -517,6 +517,12 @@ void filesizesyscall(struct intr_frame *f)
   return;
 
 }
+void mmap(struct intr_frame *f){
+  thread_current()->mapid++;
+
+  f->eax=(thread_current()->mapid);
+  return;
+}
 
 static void
 syscall_handler(struct intr_frame *f) {
@@ -537,13 +543,13 @@ syscall_handler(struct intr_frame *f) {
   p[SYS_SEEK]=seeksyscall;//seek
   p[SYS_TELL]=placeHolderSyscall;//tell
   p[SYS_CLOSE]=closeSyscall;//close
-  p[SYS_MMAP]=placeHolderSyscall;
+  p[SYS_MMAP]= mmap;
   p[SYS_MUNMAP]=placeHolderSyscall;
 
   void *stack_pointer = f->esp;
 
-printf("Address is '%p'\n", stack_pointer);
-  printf("PHYS_BASE is '%p'\n", PHYS_BASE);
+//printf("Address is '%p'\n", stack_pointer);
+ // printf("PHYS_BASE is '%p'\n", PHYS_BASE);
 
 
   if (is_user_vaddr(stack_pointer)&&isValidAddress(stack_pointer)&&(PHYS_BASE>stack_pointer)) {
@@ -556,6 +562,7 @@ printf("Address is '%p'\n", stack_pointer);
       thread_exit();
     }
     p[index](f);
+    //printf("done\n");
     return;
 
   }
