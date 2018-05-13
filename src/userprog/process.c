@@ -123,6 +123,7 @@ start_process(void *in_args) {
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
+  list_init(&thread_current()->page_list);
   success = load(args_struct->args, &if_.eip, &if_.esp);
 
   //palloc_free_page(args_struct->args);//We clear out the textual arguements to save spac
@@ -130,7 +131,7 @@ start_process(void *in_args) {
   /* If load failed, quit. */
 
   if (!success) {
-    //printf("Failed to start\n");
+    printf("Failed to start\n");
 
 
     thread_current()->exit_status=-1;
@@ -164,6 +165,7 @@ start_process(void *in_args) {
      arguments on the stack in the form of a `struct intr_frame',
      we just point the stack pointer (%esp) to our stack frame
      and jump to it. */
+  //printf("STARTING... %p\n",(&if_)->esp);
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED();
 }
@@ -438,6 +440,7 @@ load(const char *cmdline, void (**eip)(void), void **esp) {
   t->pagedir = pagedir_create();
   if (t->pagedir == NULL)
     goto done;
+  list_init(&t->page_list);
   process_activate();
 
   /* Open executable file. */
@@ -527,11 +530,12 @@ load(const char *cmdline, void (**eip)(void), void **esp) {
   success = true;
 
   done:
+  /*
   if(fail){
     file_allow_write(file);
     thread_current()->exit_status=-1;
     return false;
-  }
+  }*/
   //palloc_free_page(argv);
   thread_current()->exe=file;
   /* We arrive here whether the load is successful or not. */
@@ -611,7 +615,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
   ASSERT(pg_ofs(upage) == 0);
   ASSERT(ofs % PGSIZE == 0);
 
-  file_seek(file, ofs);
+  //file_seek(file, ofs);
   while (read_bytes > 0 || zero_bytes > 0) {
     /* Calculate how to fill this page.
        We will read PAGE_READ_BYTES bytes from FILE
@@ -619,22 +623,40 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
     size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
     size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-    /* Get a page of memory. */
-    //uint8_t *kpage = palloc_get_page(PAL_USER);
+    /* Get a page of memory.
+    uint8_t *kpage = palloc_get_page(PAL_USER);
+    //uint8_t *kpage=fAlloc(PAL_USER,upage);
+    if (kpage == NULL) {
+      printf("NULL KPAGE\n");
+      return false;
+    }
 
 
-    /* Load this page. */
+    if (file_read(file, kpage, page_read_bytes) != (int) page_read_bytes) {
+      palloc_free_page(kpage);
+      printf("FILE READ ERROR\n");
+      return false;
+    }
+    memset(kpage + page_read_bytes, 0, page_zero_bytes);
 
 
-    /* Add the page to the process's address space. */
-    if (!pt_add_file(file, ofs, upage, page_read_bytes, page_zero_bytes, writable)) {
+    if (!install_page(upage, kpage, writable)) {
+      printf("ASSHOLE\n");
       palloc_free_page(kpage);
       return false;
     }
+    */
+    if (!pt_add_file(file, ofs, upage, page_read_bytes, page_zero_bytes, writable,list_size (&thread_current()->page_list))) {
+      printf("ASSHOLE!\n");
+      return false;
+    }
+    printf("FSIZE IS %i\n",list_size (&thread_current()->page_list));
+    //printf("SEGMENT LOADED\n");
 
     /* Advance. */
     read_bytes -= page_read_bytes;
     zero_bytes -= page_zero_bytes;
+    ofs += page_read_bytes;
     upage += PGSIZE;
   }
   return true;
@@ -643,6 +665,22 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 /*decrements *esp by size(moving to the next part in the stack)
  * and then copys the contents of buffer into esp
  */
+/*
+void push(void **esp, void *buffer, size_t size) {
+  //printf("Before\n");
+  char temp_buffer[size];
+  //hex_dump(kpage+*ofs-size,kpage+*ofs-size,size, true);
+  //hex_dump((unsigned int)(ofs-size),kpage,size, true);
+  //printf("Old esp is '%p'\n",kpage+*ofs);
+  *esp -= size;
+  //printf("new esp is '%p'\n",kpage+*ofs);
+  //printf("Pushing '%s' with size '%i' to address '%p'\n",buffer,size,kpage+*ofs);
+  memcpy(*esp, buffer, size);
+  //hex_dump(kpage+*ofs,kpage+*ofs,size, true);
+
+  //*(kpage+*ofs)=5;
+}*/
+
 void push(void *kpage, unsigned int *ofs, void *buffer, size_t size) {
   //printf("Before\n");
   char temp_buffer[size];
@@ -658,11 +696,11 @@ void push(void *kpage, unsigned int *ofs, void *buffer, size_t size) {
   //*(kpage+*ofs)=5;
 }
 
-
 /* Create a minimal stack by mapping a zeroed page at the top of
    user virtual memory. */
 static bool
 setup_stack(void **esp, int argc, char **argv) {
+  char buffer[2048];
   //printf("Setting up stack\n");
   /*OLD METHOD THAT USED INSTALL PAGE
   uint8_t *kpage;
@@ -688,11 +726,14 @@ setup_stack(void **esp, int argc, char **argv) {
       return;
     }
   }
-  */
-  printf("Extending stack\n");
-  bool success = extend_stack(((uint8_t *) PHYS_BASE) - PGSIZE);
-  printf("Done\n");
+*/
+  //printf("Extending stack\n");
+  printf("STACK ADDRESS IS %p\n",((uint8_t *) PHYS_BASE) - PGSIZE);
+  uint8_t * upage = ((uint8_t *) PHYS_BASE) - PGSIZE;
+  bool success = extend_stack(upage);
+  //printf("Done\n");
   uint8_t * kpage=pg_round_down(((uint8_t *) PHYS_BASE) - PGSIZE);
+  //uint8_t * kpage=PHYS_BASE;
   if(!success){
     return false;
   }
@@ -700,7 +741,7 @@ setup_stack(void **esp, int argc, char **argv) {
   *esp = PHYS_BASE;
 
   uint32_t addresses[argc + 1];//When pushing arguements we save their addresses;
-
+  //*/
   unsigned int ofs = PGSIZE;
   // - sizeof(uint8_t);
 
@@ -716,6 +757,7 @@ setup_stack(void **esp, int argc, char **argv) {
     //We push our addresses
     //printf("Pushing argument '%s'\n",argv[i]);
     push(kpage, &ofs, argv[i], arg_size);
+    //push(esp, argv[i], arg_size);
     addresses[i] = (unsigned int) (*esp) - ((unsigned int) PGSIZE - (unsigned int) (ofs));
 
     //addresses[i]=*esp-(unsigned int)PGSIZE-(unsigned int)(ofs);
@@ -724,8 +766,7 @@ setup_stack(void **esp, int argc, char **argv) {
     //offset -= size_rounded;//We move our offset to the next position on the stack
   }
   //char test=0;
-  //push(kpage,&test,argv[i], sizeof());
-  //hex_dump(*esp,buffer,PHYS_BASE-*esp, true);
+
   /*Now that we have the contents of our arguements pushed in the stack, and their addresses on the
    * stack saved, we can word aligh the stack pointer*/
   //*esp=(void*)ROUND_DOWN((unsigned long)*esp,4);
@@ -739,23 +780,29 @@ setup_stack(void **esp, int argc, char **argv) {
  * Seems like extra work but it saves the time of having to make another push() function
   */
   push(kpage, &ofs, &null, sizeof(uint32_t));
+  //push(esp, &null, sizeof(uint32_t));
   /*We then go in reverse order and push the addresses of each argv, rounding down each time*/
   for (int i = argc - 1; i >= 0; --i) {
     uint32_t cur_address = addresses[i];
-    //push(esp,&cur_address, sizeof(cur_address));
+
     push(kpage, &ofs, &cur_address, sizeof(uint32_t));
+    //push(esp,&cur_address, sizeof(uint32_t));
   }
   /*We push the address of our new array on the stack in this case it is the last value of esp*/
   uint32_t start_of_argv = (unsigned int) (*esp) - ((unsigned int) PGSIZE - (unsigned int) (ofs));
   //*esp=(void*)ROUND_DOWN((unsigned long)*esp,4);
   //push(esp,&start_of_argv, 1);
   push(kpage, &ofs, &start_of_argv, sizeof(uint32_t));
+  //push(esp, &start_of_argv, sizeof(uint32_t));
   /*we then push argc*/
   push(kpage, &ofs, &argc, sizeof(uint32_t));
+  //push(esp, &argc, sizeof(uint32_t));
+
   //ofs -= sizeof(void *);
   /*and finaly our return address*/
   uint32_t zero = 0;
   push(kpage, &ofs, &zero, sizeof(uint32_t));
+  //push(esp, &zero, sizeof(uint32_t));
   //We change *esp back to its origional value
 
   //*esp=oldesp;
@@ -764,8 +811,13 @@ setup_stack(void **esp, int argc, char **argv) {
   //and then subtract our offset.
   unsigned int ofs2 = (unsigned int) PGSIZE - (unsigned int) (ofs);
 
-  *esp = (unsigned int) (*esp) - ofs2;
 
+
+
+  *esp = (unsigned int) (*esp) - ofs2;
+  //*esp = (unsigned int) (*esp) - ofs;
+  printf("Final ESP is %p\n",*esp);
+  //hex_dump((uintptr_t)*esp, *esp,200,true);
   return success;
 }
 

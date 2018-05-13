@@ -501,7 +501,7 @@ void filesizesyscall(struct intr_frame *f)
 static void
 syscall_handler(struct intr_frame *f) {
   /*SYSCALL LIST*/
-
+  printf("SYSCALL!!!\n");
 
   int (*p[14]) (void* sp);
   p[0]=haltSyscall;

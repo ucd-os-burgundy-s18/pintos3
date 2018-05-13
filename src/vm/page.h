@@ -12,13 +12,14 @@ struct sup_page_table_entry{
 
     bool for_swap;
     bool for_mmap;
+    bool for_file;
     bool is_loaded;
     bool is_pinned;
     bool is_writable;
     size_t swap_id;
     struct list_elem elem;
 
-
+    size_t debugID;
     struct file* file;
     size_t file_offset;
     size_t file_read_bytes;
@@ -33,7 +34,7 @@ bool page_load(struct sup_page_table_entry* pt);
 bool mmap_load(struct sup_page_table_entry* pt);
 bool swap_load(struct sup_page_table_entry* pt);
 bool file_load(struct sup_page_table_entry* pt);
-bool pt_add_file(struct file* file,int32_t offset,uint8_t * upage,uint32_t file_read_bytes,uint32_t file_zero_bytes,bool writible);
+bool pt_add_file(struct file* file,int32_t offset,uint8_t * upage,uint32_t file_read_bytes,uint32_t file_zero_bytes,bool writible,size_t debug);
 bool pt_add_mmap(struct file* file,int32_t offset,uint8_t * upage,uint32_t file_read_bytes,uint32_t file_zero_bytes);
 
 

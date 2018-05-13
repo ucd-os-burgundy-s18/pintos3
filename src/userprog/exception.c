@@ -29,86 +29,85 @@ static void page_fault (struct intr_frame *);
 void
 exception_init (void)
 {
- /* These exceptions can be raised explicitly by a user program,
-    e.g. via the INT, INT3, INTO, and BOUND instructions.  Thus,
-    we set DPL==3, meaning that user programs are allowed to
-    invoke them via these instructions. */
- intr_register_int (3, 3, INTR_ON, kill, "#BP Breakpoint Exception");
- intr_register_int (4, 3, INTR_ON, kill, "#OF Overflow Exception");
- intr_register_int (5, 3, INTR_ON, kill,
-                    "#BR BOUND Range Exceeded Exception");
+  /* These exceptions can be raised explicitly by a user program,
+     e.g. via the INT, INT3, INTO, and BOUND instructions.  Thus,
+     we set DPL==3, meaning that user programs are allowed to
+     invoke them via these instructions. */
+  intr_register_int (3, 3, INTR_ON, kill, "#BP Breakpoint Exception");
+  intr_register_int (4, 3, INTR_ON, kill, "#OF Overflow Exception");
+  intr_register_int (5, 3, INTR_ON, kill,
+                     "#BR BOUND Range Exceeded Exception");
 
- /* These exceptions have DPL==0, preventing user processes from
-    invoking them via the INT instruction.  They can still be
-    caused indirectly, e.g. #DE can be caused by dividing by
-    0.  */
- intr_register_int (0, 0, INTR_ON, kill, "#DE Divide Error");
- intr_register_int (1, 0, INTR_ON, kill, "#DB Debug Exception");
- intr_register_int (6, 0, INTR_ON, kill, "#UD Invalid Opcode Exception");
- intr_register_int (7, 0, INTR_ON, kill,
-                    "#NM Device Not Available Exception");
- intr_register_int (11, 0, INTR_ON, kill, "#NP Segment Not Present");
- intr_register_int (12, 0, INTR_ON, kill, "#SS Stack Fault Exception");
- intr_register_int (13, 0, INTR_ON, kill, "#GP General Protection Exception");
- intr_register_int (16, 0, INTR_ON, kill, "#MF x87 FPU Floating-Point Error");
- intr_register_int (19, 0, INTR_ON, kill,
-                    "#XF SIMD Floating-Point Exception");
+  /* These exceptions have DPL==0, preventing user processes from
+     invoking them via the INT instruction.  They can still be
+     caused indirectly, e.g. #DE can be caused by dividing by
+     0.  */
+  intr_register_int (0, 0, INTR_ON, kill, "#DE Divide Error");
+  intr_register_int (1, 0, INTR_ON, kill, "#DB Debug Exception");
+  intr_register_int (6, 0, INTR_ON, kill, "#UD Invalid Opcode Exception");
+  intr_register_int (7, 0, INTR_ON, kill,
+                     "#NM Device Not Available Exception");
+  intr_register_int (11, 0, INTR_ON, kill, "#NP Segment Not Present");
+  intr_register_int (12, 0, INTR_ON, kill, "#SS Stack Fault Exception");
+  intr_register_int (13, 0, INTR_ON, kill, "#GP General Protection Exception");
+  intr_register_int (16, 0, INTR_ON, kill, "#MF x87 FPU Floating-Point Error");
+  intr_register_int (19, 0, INTR_ON, kill,
+                     "#XF SIMD Floating-Point Exception");
 
- /* Most exceptions can be handled with interrupts turned on.
-    We need to disable interrupts for page faults because the
-    fault address is stored in CR2 and needs to be preserved. */
- intr_register_int (14, 0, INTR_OFF, page_fault, "#PF Page-Fault Exception");
+  /* Most exceptions can be handled with interrupts turned on.
+     We need to disable interrupts for page faults because the
+     fault address is stored in CR2 and needs to be preserved. */
+  intr_register_int (14, 0, INTR_OFF, page_fault, "#PF Page-Fault Exception");
 }
 
 /* Prints exception statistics. */
 void
 exception_print_stats (void)
 {
- printf ("Exception: %lld page faults\n", page_fault_cnt);
+  printf ("Exception: %lld page faults\n", page_fault_cnt);
 }
 
 /* Handler for an exception (probably) caused by a user process. */
 static void
 kill (struct intr_frame *f)
 {
- /* This interrupt is one (probably) caused by a user process.
-    For example, the process might have tried to access unmapped
-    virtual memory (a page fault).  For now, we simply kill the
-    user process.  Later, we'll want to handle page faults in
-    the kernel.  Real Unix-like operating systems pass most
-    exceptions back to the process via signals, but we don't
-    implement them. */
+  /* This interrupt is one (probably) caused by a user process.
+     For example, the process might have tried to access unmapped
+     virtual memory (a page fault).  For now, we simply kill the
+     user process.  Later, we'll want to handle page faults in
+     the kernel.  Real Unix-like operating systems pass most
+     exceptions back to the process via signals, but we don't
+     implement them. */
 
- /* The interrupt frame's code segment value tells us where the
-    exception originated. */
- switch (f->cs)
- {
-  case SEL_UCSEG:
-   /* User's code segment, so it's a user exception, as we
-      expected.  Kill the user process.  */
-   printf ("%s: dying due to interrupt %#04x (%s).\n",
-           thread_name (), f->vec_no, intr_name (f->vec_no));
-   intr_dump_frame (f);
-   thread_exit ();
+  /* The interrupt frame's code segment value tells us where the
+     exception originated. */
+  switch (f->cs)
+  {
+    case SEL_UCSEG:
+      /* User's code segment, so it's a user exception, as we
+         expected.  Kill the user process.  */
+      printf ("%s: dying due to interrupt %#04x (%s).\n",
+              thread_name (), f->vec_no, intr_name (f->vec_no));
+      intr_dump_frame (f);
+      thread_exit ();
 
-  case SEL_KCSEG:
-   /* Kernel's code segment, which indicates a kernel bug.
-      Kernel code shouldn't throw exceptions.  (Page faults
-      may cause kernel exceptions--but they shouldn't arrive
-      here.)  Panic the kernel to make the point.  */
-   intr_dump_frame (f);
-   PANIC ("Kernel bug - unexpected interrupt in kernel");
+    case SEL_KCSEG:
+      /* Kernel's code segment, which indicates a kernel bug.
+         Kernel code shouldn't throw exceptions.  (Page faults
+         may cause kernel exceptions--but they shouldn't arrive
+         here.)  Panic the kernel to make the point.  */
+      intr_dump_frame (f);
+      PANIC ("Kernel bug - unexpected interrupt in kernel");
 
-  default:
-   /* Some other code segment?  Shouldn't happen.  Panic the
-      kernel. */
-   printf ("Interrupt %#04x (%s) in unknown segment %04x\n",
-           f->vec_no, intr_name (f->vec_no), f->cs);
+    default:
+      /* Some other code segment?  Shouldn't happen.  Panic the
+         kernel. */
+      printf ("Interrupt %#04x (%s) in unknown segment %04x\n",
+              f->vec_no, intr_name (f->vec_no), f->cs);
 
-   thread_exit ();
- }
+      thread_exit ();
+  }
 }
-
 /* Page fault handler.  This is a skeleton that must be filled in
    to implement virtual memory.  Some solutions to project 2 may
    also require modifying this code.
@@ -128,7 +127,7 @@ page_fault (struct intr_frame *f)
   void *fault_addr;  /* Fault address. */
   bool success=true;
   void* fault_addr_down;
-  //printf("AAAAAA\n");
+  printf("AAAAAA\n");
 
 /* Obtain faulting address, the virtual address that was
    accessed to cause the fault.  It may point to code or to
@@ -139,8 +138,56 @@ page_fault (struct intr_frame *f)
    (#PF)". */
   asm ("movl %%cr2, %0" : "=r" (fault_addr));
   user = (f->error_code & PF_U) != 0;
+
+
+
+/* Turn interrupts back on (they were only off so that we could
+   be assured of reading CR2 before it changed). */
+  intr_enable ();
+
+/* Count page faults. */
+  page_fault_cnt++;
+  //success=true;
+  printf("esp is %p\n",f->esp);
+  //printf("esp-32 is %p\n",f->esp-32);
+
+  //fault_addr=pg_round_down(fault_addr);
+  printf("Falt_addr is %p\n",fault_addr);
+  //printf("esp down is %p\n",pg_round_down(f->esp));
+  //printf("Falt_addr_down is %p\n",fault_addr);
+  //printf("PHYS_BASE IS %p\n",PHYS_BASE);
+
+
+  not_present = (f->error_code & PF_P) == 0;
+  //fault_addr = fault_addr - (void *)(((int)fault_addr) % PGSIZE);
+  //printf("Falt_addr2 is %p\n",fault_addr);
+  if(fault_addr>(fault_addr > ((void *) 0x08048000))){
+    printf("LARGER THEN MAX HEIGHT\n");
+  }
+  if(not_present) {
+    fault_addr = fault_addr - (void *) (((int) fault_addr) % PGSIZE);
+    printf("Falt_addr is now %p\n", fault_addr);
+    success = false;
+    printf("WWWEE\n");
+    struct sup_page_table_entry *cur_page = get_pte_from_user(fault_addr);
+    if (cur_page) {
+      printf("EXISTS\n");
+      if (page_load(cur_page)) {
+        printf("RETURNING\n");
+        return;
+      }
+
+    }
+  }
+  if(!user || fault_addr>=f->esp-32){
+    printf("get_user Failing\n");
+    if(extend_stack(fault_addr)){
+      printf("Stack extended\n");
+      return;
+    }
+  }
   if(!user) {
-    //printf("SEGFAULT!\n");
+    printf("SEGFAULT!\n");
     int value = -1;
     f->eip=f->eax;
     f->eax=-1;
@@ -151,55 +198,21 @@ page_fault (struct intr_frame *f)
   }
 
 
-/* Turn interrupts back on (they were only off so that we could
-   be assured of reading CR2 before it changed). */
-  intr_enable ();
+  printf("WHY?\n");
 
-/* Count page faults. */
-  page_fault_cnt++;
-  //success=true;
-  //printf("esp is %p\n",f->esp);
-  //printf("esp+32 is %p\n",f->esp+32);
-  //printf("Falt_addr is %p\n",fault_addr);
-  //fault_addr_down=pg_round_down(fault_addr);
-  //printf("Falt_addr_down is %p\n",fault_addr);
-  //printf("PHYS_BASE IS %p\n",PHYS_BASE);
-  if(fault_addr == NULL || fault_addr >= PHYS_BASE || fault_addr < 0x08048000){
-    success = false;
-    //printf("malasis\n");
-  }
-  else if(fault_addr > (f->esp+32) ||fault_addr < (f->esp-32))
-  {
 
-    //printf("get_user Failing\n");
-    success = false;
-  }
-  //printf("WHY?\n");
-  if(success)
-  {
-    //printf("poop");
-    void* upage = pg_round_down(fault_addr);
-    void* kpage = (void*)palloc_get_page(PAL_USER);
-    bool writable = true;
-    //bool correct = install_page(upage, kpage, writable);
-    struct thread* t = thread_current();
-    bool correct= (pagedir_get_page(t->pagedir, upage) == NULL
-                   && pagedir_set_page(t->pagedir, upage, kpage, writable));
-    //printf("IS IT CORRECT??? %i\n",correct);
-    return;
-  }
 
 /* Determine cause. */
-  not_present = (f->error_code & PF_P) == 0;
+
   write = (f->error_code & PF_W) != 0;
   thread_current()->exit_status=-1;
   thread_exit();
-  /*
+
  printf ("Page fault at %p: %s error %s page in %s context.\n",
          fault_addr,
          not_present ? "not present" : "rights violation",
          write ? "writing" : "reading",
-         user ? "user" : "kernel");*/
+         user ? "user" : "kernel");
 
 
 /* To implement virtual memory, delete the rest of the function
@@ -209,56 +222,3 @@ page_fault (struct intr_frame *f)
 //kill (f);
 }
 
-static void
-page_fault_old (struct intr_frame *f)
-{
- bool not_present;  /* True: not-present page, false: writing r/o page. */
- bool write;        /* True: access was write, false: access was read. */
- bool user;         /* True: access by user, false: access by kernel. */
- void *fault_addr;  /* Fault address. */
- printf("AAAAAA\n");
- /* Obtain faulting address, the virtual address that was
-    accessed to cause the fault.  It may point to code or to
-    data.  It is not necessarily the address of the instruction
-    that caused the fault (that's f->eip).
-    See [IA32-v2a] "MOV--Move to/from Control Registers" and
-    [IA32-v3a] 5.15 "Interrupt 14--Page Fault Exception
-    (#PF)". */
- asm ("movl %%cr2, %0" : "=r" (fault_addr));
- user = (f->error_code & PF_U) != 0;
- if(!user) {
-  //printf("SEGFAULT!\n");
-  int value = -1;
-  f->eip=f->eax;
-  f->eax=-1;
-  thread_current()->exit_status=-1;
-  thread_exit();
-  return;
- }
-
-
- /* Turn interrupts back on (they were only off so that we could
-    be assured of reading CR2 before it changed). */
- intr_enable ();
-
- /* Count page faults. */
- page_fault_cnt++;
-
- /* Determine cause. */
- not_present = (f->error_code & PF_P) == 0;
- write = (f->error_code & PF_W) != 0;
- thread_current()->exit_status=-1;
-  /*
- printf ("Page fault at %p: %s error %s page in %s context.\n",
-         fault_addr,
-         not_present ? "not present" : "rights violation",
-         write ? "writing" : "reading",
-         user ? "user" : "kernel");*/
- thread_exit();
-
- /* To implement virtual memory, delete the rest of the function
-    body, and replace it with code that brings in the page to
-    which fault_addr refers.*/
-
- //kill (f);
-}

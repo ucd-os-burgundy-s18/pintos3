@@ -21,7 +21,9 @@ void initialize_frame_table(void){
 void * try_evict(struct frame_entry* victim,int flag){
 
   struct sup_page_table_entry* page_table=victim->supplementry_PT;
+  ASSERT(page_table);
   if(!victim->supplementry_PT->is_pinned) {
+    printf("ITS PINNED\n");
     struct thread *t = victim->owner;
 
     if(pagedir_is_accessed(t->pagedir,page_table->user_vaddr)){
@@ -41,7 +43,7 @@ void * try_evict(struct frame_entry* victim,int flag){
         }else{
           //If its a swap frame then we can swap it out
           //TODO implement swap_page_out
-          //PANIC("OH NO I DONT KNOW HOW TO SWAP YET PLEASE HALP ME!!!!");
+          PANIC("OH NO I DONT KNOW HOW TO SWAP YET PLEASE HALP ME!!!!");
 
         }
 
@@ -53,30 +55,39 @@ void * try_evict(struct frame_entry* victim,int flag){
       free(victim);
       struct frame_entry* fresh_frame=palloc_get_page(flag);
       if(!fresh_frame){
-        //PANIC("You filled up the swap space. You monster.");
+        PANIC("You filled up the swap space. You monster.");
       }
       return fresh_frame;
     }
   }
-  return NULL;
+  printf("ITS NOT PINNED\n");
+  return victim;
 }
 struct frame_entry* fAlloc(struct sup_page_table_entry* curPage,int flag){
+  if ( (flag & PAL_USER) == 0 ) {
+    printf("ZERO\n");
+    return NULL;
+  }
   void* new_frame=palloc_get_page(flag);
   lock_acquire(&global_frame_lock);
 
   while(!new_frame){
     printf("DEBUG: palloc failed, attempting to evict!\n");
     struct list_elem *e=list_begin(&global_frame_table);
-
+    struct frame_entry * evicted_victim=NULL;
     while(true) {
 
       struct frame_entry *victim = list_entry(e,struct frame_entry,elem);
+      ASSERT(victim);
+
       //We try to evict the current victim
-      struct frame_entry * evicted_victim=try_evict(victim,flag);
+
+      evicted_victim=try_evict(victim,flag);
       //If we successfuly evicited our victim then we set our
       //newframe to it and leave the loop
       if(evicted_victim){
         new_frame=evicted_victim;
+        printf("Eviction successful\n");
         break;
       }
       //if we hit the end of the list
@@ -87,13 +98,21 @@ struct frame_entry* fAlloc(struct sup_page_table_entry* curPage,int flag){
       }
     }
   }
+
+  printf("Got a valid frame!\n");
   //Now that we have a new frame we gotta add it to our frame table
+
   struct frame_entry* frame_to_add= malloc(sizeof(struct frame_entry));
 
   frame_to_add->frame=new_frame;
   frame_to_add->owner=thread_current();
+
+  //printf("Adding to list\n");
   list_push_back(&global_frame_table,&frame_to_add->elem);
+  //printf("Added!\n");
   lock_release(&global_frame_lock);
+  //printf("frame address is %i\n",frame_to_add->user_vaddr);
+  return new_frame;
 }
 void fFree(struct frame_entry* curFrame){
   struct list_elem* e;
