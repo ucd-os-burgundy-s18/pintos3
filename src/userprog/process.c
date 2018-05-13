@@ -8,6 +8,7 @@
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
+#include "userprog/syscall.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
@@ -131,7 +132,7 @@ start_process(void *in_args) {
   /* If load failed, quit. */
 
   if (!success) {
-    printf("Failed to start\n");
+    //printf("no-such-file");
 
 
     thread_current()->exit_status=-1;
@@ -165,7 +166,7 @@ start_process(void *in_args) {
      arguments on the stack in the form of a `struct intr_frame',
      we just point the stack pointer (%esp) to our stack frame
      and jump to it. */
-  //printf("STARTING... %p\n",(&if_)->esp);
+
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED();
 }
@@ -224,6 +225,7 @@ process_wait(tid_t child_tid) {
      */
     struct childStatus* child_life=(struct childStatus*) malloc(sizeof(struct childStatus));
     sema_init(&child_life->blocker,0);
+
     child->p_waiter=child_life;
 
     sema_down(&child_life->blocker);
@@ -243,39 +245,58 @@ process_exit(void) {
 
   struct thread *cur = thread_current();
   uint32_t *pd;
+  enum intr_level old_level;
+  old_level = intr_disable ();
+  if (cur->exe != NULL) {
+    //printf("UNLOCKIGN EXE\n");
+    file_allow_write(cur->exe);
+    file_close(cur->exe);
+
+    cur->exe = NULL;
+  }
+  //printf("Is it even working???\n");
+
   if(!cur->failed_to_spawn) {
+
     printf("%s: exit(%d)\n", cur->name, cur->exit_status);
     enum intr_level old_level;
     //printf("afhkjahfjkafa\n");
 
-    old_level = intr_disable ();
+    if (lock_held_by_current_thread(&file_lock)) {
+      //printf("RELEASING FILE LOCK\n");
+      lock_release(&file_lock);
+    }
     /* Destroy the current process's page directory and switch back
        to the kernel-only page directory. */
+    lock_acquire(&file_lock);
+    lock_release(&file_lock);
 
-    pd = cur->pagedir;
-    if (pd != NULL) {
-      /* Correct ordering here is crucial.  We must set
-         cur->pagedir to NULL before switching page directories,
-         so that a timer interrupt can't switch back to the
-         process page directory.  We must activate the base page
-         directory before destroying the process's page
-         directory, or our active page directory will be one
-         that's been freed (and cleared). */
-      cur->pagedir = NULL;
-      pagedir_activate(NULL);
-      pagedir_destroy(pd);
+    if (lock_held_by_current_thread(&global_frame_lock)) {
+      //printf("RELEASING FRAME LOCK\n");
+      lock_release(&global_frame_lock);
     }
-    /*We remove ourselves from our parents children list, and wake up the parent
-     *if they are waiting on us we wake them up
-     */
-    if (cur->exe != NULL) {
-      //printf("UNLOCKIGN EXE\n");
-      file_allow_write(cur->exe);
-      file_close(cur->exe);
 
-      cur->exe = NULL;
+    if(!list_empty(&cur->page_list)){
+
+      while(!list_empty(&cur->page_list)){
+        struct list_elem* e=list_pop_front(&cur->page_list);
+        struct sup_page_table_entry *page_to_kill = list_entry(e,struct sup_page_table_entry,elem);
+        if(page_to_kill) {
+          //printf("Killing page with address of %p\n", page_to_kill->user_vaddr);;
+          if (page_to_kill->is_loaded) {
+
+            fFree(pagedir_get_page(cur->pagedir, page_to_kill->user_vaddr));
+            pagedir_clear_page(cur->pagedir, page_to_kill->user_vaddr);
+          }
+        }
+
+        free(page_to_kill);
+
+
+
+      }
     }
-    //printf("Is it even working???\n");
+    //printf("Done\n");
     struct thread *t;
     if (&cur->parent) {
       //printf("Thread has parrent\n");
@@ -294,28 +315,54 @@ process_exit(void) {
 
       }
     }
-    if(!list_empty(&cur->children)){
+
+    if (!list_empty(&cur->children)) {
       //printf("ENTERED SEARCH1\n");
-      struct list_elem* e;
-      struct thread* child=NULL;
+      struct list_elem *e;
+      struct thread *child = NULL;
 
 
       for (e = list_begin(&cur->children); e != list_end(&cur->children); e = list_next(e)) {
         //printf("ENTERED SEARCH1\n");
-        child = list_entry(e,struct thread, child_elem);
-        child->parent=NULL;
+        child = list_entry(e,
+        struct thread, child_elem);
+        child->parent = NULL;
 
 
       }
     }
 
-    intr_set_level (old_level);
-  }//else{
 
-  //}
-
+    pd = cur->pagedir;
+    if (pd != NULL) {
+      /* Correct ordering here is crucial.  We must set
+         cur->pagedir to NULL before switching page directories,
+         so that a timer interrupt can't switch back to the
+         process page directory.  We must activate the base page
+         directory before destroying the process's page
+         directory, or our active page directory will be one
+         that's been freed (and cleared). */
+      cur->pagedir = NULL;
+      pagedir_activate(NULL);
+      pagedir_destroy(pd);
+    }
+  }
+  intr_set_level (old_level);
+  //printf("returning\n");
+    /*We remove ourselves from our parents children list, and wake up the parent
+     *if they are waiting on us we wake them up
+     */
 
 }
+
+
+
+
+
+
+
+
+
 
 
 /* Sets up the CPU for running user code in the current
@@ -622,7 +669,49 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
        and zero the final PAGE_ZERO_BYTES bytes. */
     size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
     size_t page_zero_bytes = PGSIZE - page_read_bytes;
+    //uint8_t *kpage = palloc_get_page(PAL_USER);
 
+    //printf("Address of upage is %p with read address at %p and zero address at %p\n",upage,upage+ page_read_bytes,upage+ page_zero_bytes);
+    /*
+    struct sup_page_table_entry *new_page=malloc(sizeof(struct sup_page_table_entry));
+    if(!new_page) {
+      printf("BOGAS\n");
+      return false;
+    }
+    if(!writable){
+      printf("REEEEE\n");
+    }
+    ASSERT(upage==pg_round_down(upage));
+    //setFile(new_page,file,offset,upage,file_read_bytes,file_zero_bytes,writible);
+    new_page->debugID=list_size (&thread_current()->page_list);
+    new_page->user_vaddr=upage;
+    new_page->file=file;
+    new_page->file_offset=ofs;
+    new_page->file_read_bytes=page_read_bytes;
+    new_page->file_zero_bytes=page_zero_bytes;
+    new_page->is_loaded=false;
+    new_page->is_pinned=false;
+    new_page->file_offset=ofs;
+    //printf("page parameters set!\n");
+    new_page->for_file=true;
+    new_page->is_writable=writable;
+    new_page->is_loaded=true;
+    new_page->is_pinned=false;
+    uint8_t *file_frame=fAlloc(new_page,PAL_USER);
+    if (file_read(file, file_frame, page_read_bytes) != (int) page_read_bytes) {
+      fFree(file_frame);
+      free(new_page);
+      printf("FILE READ ERROR\n");
+      return false;
+    }
+
+    list_push_back (&thread_current()->page_list, &new_page->elem);
+    if(!install_page1(new_page->user_vaddr,file_frame,new_page->is_writable)){
+      fFree(file_frame);
+      printf("Failed to install page\n");
+      return false;
+    }
+    printf("Created page\n");
     /* Get a page of memory.
     uint8_t *kpage = palloc_get_page(PAL_USER);
     //uint8_t *kpage=fAlloc(PAL_USER,upage);
@@ -646,11 +735,12 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
       return false;
     }
     */
+
     if (!pt_add_file(file, ofs, upage, page_read_bytes, page_zero_bytes, writable,list_size (&thread_current()->page_list))) {
       printf("ASSHOLE!\n");
       return false;
     }
-    printf("FSIZE IS %i\n",list_size (&thread_current()->page_list));
+    //printf("FSIZE IS %i\n",list_size (&thread_current()->page_list));
     //printf("SEGMENT LOADED\n");
 
     /* Advance. */
@@ -728,7 +818,7 @@ setup_stack(void **esp, int argc, char **argv) {
   }
 */
   //printf("Extending stack\n");
-  printf("STACK ADDRESS IS %p\n",((uint8_t *) PHYS_BASE) - PGSIZE);
+  //printf("STACK ADDRESS IS %p\n",((uint8_t *) PHYS_BASE) - PGSIZE);
   uint8_t * upage = ((uint8_t *) PHYS_BASE) - PGSIZE;
   bool success = extend_stack(upage);
   //printf("Done\n");
@@ -816,7 +906,7 @@ setup_stack(void **esp, int argc, char **argv) {
 
   *esp = (unsigned int) (*esp) - ofs2;
   //*esp = (unsigned int) (*esp) - ofs;
-  printf("Final ESP is %p\n",*esp);
+  //printf("Final ESP is %p\n",*esp);
   //hex_dump((uintptr_t)*esp, *esp,200,true);
   return success;
 }

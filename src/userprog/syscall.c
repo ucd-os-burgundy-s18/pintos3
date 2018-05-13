@@ -7,7 +7,7 @@
 #include "threads/vaddr.h"
 #include "threads/init.h"
 #include "userprog/pagedir.h"
-
+#include "../syscall-nr.h"
 
 
 bool isValidAddress(void* addr){
@@ -19,6 +19,7 @@ bool isValidAddress(void* addr){
   }
   return false;
 }
+
 struct file_node {
 
     struct file* aFile;
@@ -32,9 +33,12 @@ void exitWithError(){
   thread_exit();
 }
 void checkForBadArgs(struct intr_frame *f,int numArgs){
-  if(!is_user_vaddr(f->esp+(4*numArgs))) {
+  for(int i=0; i<=numArgs; ++i) {
 
-    exitWithError();
+    if (!is_user_vaddr(f->esp + (4 * i)) && isValidAddress(f->esp + (4 * i))) {
+     // printf("BAD ARGS DETECTED\n");
+      exitWithError();
+    }
   }
 
 }
@@ -70,7 +74,9 @@ syscall_init(void) {
 /*Placeholder system call, can be used for debug*/
 void placeHolderSyscall(struct intr_frame *f){
 
-  printf("SYSTEM CALL '%i' IS NOT IMPLEMENTED YET!!!!!!!!!!!!!\n",get_user(f->esp));
+  printf("SYSTEM CALL IS NOT IMPLEMENTED YET!!!!!!!!!!!!!\n");
+  //#f->eax=10;
+
 }
 
 void haltSyscall(struct intr_frame *f) {
@@ -92,7 +98,7 @@ void exitSyscall(struct intr_frame *f){
 }
 
 void execSyscall(struct intr_frame *f){
-
+  checkForBadArgs(f,1);
 
 
 
@@ -121,6 +127,7 @@ void execSyscall(struct intr_frame *f){
 }
 
 void waitSyscall(struct intr_frame *f){
+  checkForBadArgs(f,1);
   tid_t id=get_user(f->esp + 4);
   f->eax=process_wait(id);
 }
@@ -131,7 +138,7 @@ void waitSyscall(struct intr_frame *f){
 
 void createsyscall(struct intr_frame *f)
 {
-
+  checkForBadArgs(f,2);
   unsigned long buffer_address = get_user(f->esp + 7);
   buffer_address = buffer_address * 256 + get_user(f->esp + 6);
   buffer_address = buffer_address * 256 + get_user(f->esp + 5);
@@ -168,7 +175,7 @@ void createsyscall(struct intr_frame *f)
 
 void open(struct intr_frame *f)
 {
-
+  checkForBadArgs(f,1);
   unsigned long buffer_address = get_user(f->esp + 7);
   buffer_address = buffer_address * 256 + get_user(f->esp + 6);
   buffer_address = buffer_address * 256 + get_user(f->esp + 5);
@@ -184,10 +191,11 @@ void open(struct intr_frame *f)
     f->eax=-1;
     return;
   }
+
   struct file_node* a_node = (struct file_node*)malloc(sizeof(struct file_node));
   if(!a_node){
     f->eax=-1;
-    lock_release(&file_lock);
+
 
     return;
   }
@@ -219,6 +227,7 @@ void open(struct intr_frame *f)
 }
 
 void closeSyscall(struct intr_frame *f) {
+  checkForBadArgs(f,1);
   int fd = get_user(f->esp + 4);
   if (fd < 2) {
     f->eax = -1;
@@ -256,8 +265,9 @@ void closeSyscall(struct intr_frame *f) {
 
 void readSyscall(struct intr_frame *f)
 {
-
+  //printf("vvv\n");
   //int readSyscall(int fd, void* buffer, unsigned size)
+  checkForBadArgs(f,3);
 
   int fd = get_user(f->esp + 4);
   unsigned size = get_user(f->esp + 15);
@@ -275,15 +285,15 @@ void readSyscall(struct intr_frame *f)
 
 
   void* buffer=(void*)buffer_address;
-  if(!isValidAddress(buffer)){
-    //printf("Invalid address!\n");
+  if(!is_user_vaddr(buffer)){
+    printf("Invalid address!\n");
     exitWithError();
   }
-
+  //printf("aaa\n");
   //if(buffer[0]=='\0'){
    // exitWithError();
   //}
-
+  //printf("aaa\n");
   //putbuf((char*)buffer,11);
   if(fd<2){
     f->eax=-1;
@@ -335,6 +345,8 @@ void readSyscall(struct intr_frame *f)
 
 void writeSyscall(struct intr_frame *f) {
   //Getting arguements from stack
+  checkForBadArgs(f,3);
+ // printf("aaa\n");
   int fd = get_user(f->esp + 4);
 
   //unsigned size = get_user(f->esp + 12);
@@ -351,20 +363,27 @@ void writeSyscall(struct intr_frame *f) {
   buffer_address = buffer_address * 256 + get_user(f->esp + 8);
 
   void* buffer=(void*)buffer_address;
-  if(!isValidAddress(buffer)){
+
+  if((!is_user_vaddr(buffer))||!is_user_vaddr(buffer+size)){
+
     exitWithError();
   }
+
+
   if((fd<=0)||fd>thread_current()->fd){
     //f->eax=-1;
     //return;
     exitWithError();
   }
+
   if (fd == 1) {
+   // printf("aeeee\n");
     putbuf(buffer_address, size);
 
     f->eax=size;
     return;
   }
+
 //printf("FD=%i\n",fd);
   if(fd<1||fd>thread_current()->fd){
     //Checks for invalid fd's
@@ -406,6 +425,7 @@ void writeSyscall(struct intr_frame *f) {
 //void seeksyscall(int fd, unsigned position)
 void seeksyscall(struct intr_frame *f)
 {
+  checkForBadArgs(f,2);
   int fd=get_user(f->esp + 4);
 
   unsigned position = get_user(f->esp + 11);
@@ -448,7 +468,7 @@ void seeksyscall(struct intr_frame *f)
 //bool removesyscall(const char* file)
 bool removesyscall(struct intr_frame *f)
 {
-
+  checkForBadArgs(f,1);
   unsigned long buffer_address = get_user(f->esp + 7);
   buffer_address = buffer_address * 256 + get_user(f->esp + 6);
   buffer_address = buffer_address * 256 + get_user(f->esp + 5);
@@ -501,31 +521,32 @@ void filesizesyscall(struct intr_frame *f)
 static void
 syscall_handler(struct intr_frame *f) {
   /*SYSCALL LIST*/
-  printf("SYSCALL!!!\n");
+
 
   int (*p[14]) (void* sp);
-  p[0]=haltSyscall;
-  p[1]=exitSyscall;
-  p[2]=execSyscall;
-  p[3]=waitSyscall;
-  p[4]=createsyscall;//Create
-  p[5]=removesyscall;//Remove
-  p[6]=open;//Open
-  p[7]=filesizesyscall;//Filesize
-  p[8]=readSyscall;//Read
-  p[9]=writeSyscall;      //Write
-  p[10]=seeksyscall;//seek
-  p[11]=placeHolderSyscall;//tell
-  p[12]=closeSyscall;//close
-
+  p[SYS_HALT]=haltSyscall;
+  p[SYS_EXIT]=exitSyscall;
+  p[SYS_EXEC]=execSyscall;
+  p[SYS_WAIT]=waitSyscall;
+  p[SYS_CREATE]=createsyscall;//Create
+  p[SYS_REMOVE]=removesyscall;//Remove
+  p[SYS_OPEN]=open;//Open
+  p[SYS_FILESIZE]=filesizesyscall;//Filesize
+  p[SYS_READ]=readSyscall;//Read
+  p[SYS_WRITE]=writeSyscall;      //Write
+  p[SYS_SEEK]=seeksyscall;//seek
+  p[SYS_TELL]=placeHolderSyscall;//tell
+  p[SYS_CLOSE]=closeSyscall;//close
+  p[SYS_MMAP]=placeHolderSyscall;
+  p[SYS_MUNMAP]=placeHolderSyscall;
 
   void *stack_pointer = f->esp;
 
-  //printf("Address is '%p'\n", stack_pointer);
-  //printf("PHYS_BASE is '%p'\n", PHYS_BASE);
+printf("Address is '%p'\n", stack_pointer);
+  printf("PHYS_BASE is '%p'\n", PHYS_BASE);
 
 
-  if (is_user_vaddr(stack_pointer)) {
+  if (is_user_vaddr(stack_pointer)&&isValidAddress(stack_pointer)&&(PHYS_BASE>stack_pointer)) {
 
 
     int index=get_user(stack_pointer);

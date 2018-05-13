@@ -12,7 +12,7 @@
 #include "userprog/syscall.h"
 
 
-
+//check_expected ([<<'EOF']);
 
 
 //alternate install page that is no differnt from the one in process.c
@@ -36,6 +36,7 @@ bool extend_stack(void* user_vaddr){
     return false;
   }
 
+  //printf("input address is  %p\n",user_vaddr);
   //ASSERT(user_vaddr==pg_round_down(user_vaddr));
 
   if ( (size_t) (PHYS_BASE - pg_round_down(user_vaddr)) > (1 << 23)) {
@@ -45,6 +46,12 @@ bool extend_stack(void* user_vaddr){
   //printf("DEBUG: EXTENDING STACK\n");
   //We start by creating our new page table entry
   struct sup_page_table_entry *new_stack_page=malloc(sizeof(struct sup_page_table_entry));
+  //printf("New address is %p\n",new_stack_page);
+  if(!new_stack_page){
+    return false;
+  }
+
+
   //Since we are creating a new page, we want its address to be at the bottom
   //of page relitive to the user virtural address
   //printf("Page allocated\n");
@@ -61,14 +68,14 @@ bool extend_stack(void* user_vaddr){
 
   if(!new_frame){
     free(new_stack_page);
-    //printf("DEBUG: FRAME FAILED TO ALLOCATE!!!!\n");
+    printf("DEBUG: FRAME FAILED TO ALLOCATE!!!!\n");
     return false;
   }
   //printf("installing page at adddress %p\n",user_vaddr);
   if(!install_page1(new_stack_page->user_vaddr,new_frame,true)){
     free(new_stack_page);
     fFree(new_frame);
-    //printf("DEBUG: INSTALL PAGE FAILED!!!\n");
+    printf("DEBUG: INSTALL PAGE FAILED!!!\n");
     return false;
   }
   //printf("page installed\n");
@@ -85,17 +92,20 @@ bool extend_stack(void* user_vaddr){
 //the same address as our rounded down user_vaddr
 struct sup_page_table_entry* get_pte_from_user(void* user_vaddr){
   struct list_elem *e;
-
+  enum intr_level old_level;
+  //printf("DEBUG: Checking %p with\n",pg_round_down(user_vaddr));
+  old_level = intr_disable ();
   for (e = list_begin(&thread_current()->page_list); e != list_end(&thread_current()->page_list); e = list_next(e)) {
 
     struct sup_page_table_entry* cur_page=list_entry(e,struct sup_page_table_entry,elem);
-    printf("Checking %p with list with %p\n",pg_round_down(user_vaddr),cur_page->user_vaddr);
-    if(pg_round_down(cur_page->user_vaddr)==pg_round_down(user_vaddr)){
-
+    //printf("DEBUG: Checking %p with list with %p\n",pg_round_down(user_vaddr),cur_page->user_vaddr);
+    if(cur_page->user_vaddr==pg_round_down(user_vaddr)){
+      intr_set_level (old_level);
       return cur_page;
     }
   }
-
+  intr_set_level (old_level);
+  //printf("Failed to find\n");
   return NULL;
 }
 
@@ -111,13 +121,16 @@ void setFile(struct sup_page_table_entry* page,struct file* file,int32_t offset,
 //TODO: implement these fuckers
 
 bool pt_add_file(struct file* file,int32_t offset,uint8_t * upage,uint32_t file_read_bytes,uint32_t file_zero_bytes,bool writible,size_t debug){
-  //printf("Adding file!\n");
+  //printf("DEBUG: %p is set to lazily load a file when accesed\n",upage);
   struct sup_page_table_entry *new_page=malloc(sizeof(struct sup_page_table_entry));
+
   if(!new_page) {
     printf("BOGAS\n");
     return false;
   }
-  printf("ID %p\n",debug);
+  //printf("DEBUG: ADDING UPAGE %p \n",pg_round_down(upage));
+
+  //printf("ID %p\n",debug);
   ASSERT(upage==pg_round_down(upage));
   //setFile(new_page,file,offset,upage,file_read_bytes,file_zero_bytes,writible);
   new_page->debugID=debug;
@@ -130,6 +143,7 @@ bool pt_add_file(struct file* file,int32_t offset,uint8_t * upage,uint32_t file_
   new_page->is_pinned=false;
   new_page->file_offset=offset;
   //printf("page parameters set!\n");
+  new_page->is_writable=writible;
   new_page->for_file=true;
 
   new_page->is_loaded=false;
@@ -148,14 +162,22 @@ bool pt_add_mmap(struct file* file,int32_t offset,uint8_t * upage,uint32_t file_
 bool page_load(struct sup_page_table_entry* pt){
   pt->is_pinned=true;
   if(pt->is_loaded){
-    printf("IS LOADED\n");
+    //printf("DEBUG: %p is already loaded\n");
     return true;
   }
-  printf("LOADING\n");
+  //printf("LOADING\n");
   if(pt->for_file){
     return file_load(pt);
   }
-  printf("NOT LOADED\n");
+  if(pt->for_swap){
+    printf("Swap\n");
+    return NULL;
+  }
+  if(pt->for_mmap){
+    printf("mmap\n");
+    return NULL;
+  }
+  //printf("NOT LOADED\n");
   return false;
 }
 bool mmap_load(struct sup_page_table_entry* pt){
@@ -165,30 +187,28 @@ bool swap_load(struct sup_page_table_entry* pt){
 
 }
 bool file_load(struct sup_page_table_entry* pt){
-  printf("ID IS %i\n",pt->debugID);
+  //printf("ID IS %i\n",pt->debugID);
 
   enum palloc_flags flags=PAL_USER;
   if(pt->file_read_bytes==0){
+    //printf("SETTING TO ZERO\n");
+    flags |= PAL_ZERO;
 
-    flags|=PAL_ZERO;
   }
-  uint8_t *file_frame=fAlloc(pt,flags);
-  if(!file_frame){
+  uint8_t *file_frame=NULL;
+  file_frame=fAlloc(pt,flags);
+
+  //printf("DEBUG: %p is now getting a frame at %p mapped to it\n",pt->user_vaddr,file_frame);
+  if(file_frame==NULL){
+    //printf("BOGAS\n");
     return false;
   }
+
   if(pt->file_read_bytes) {
-    printf("Has bytes\n");
+    //printf("Has bytes\n");
     lock_acquire(&file_lock);
 
-    printf("READ BYTES = %i\n",pt->file_read_bytes);
-    /*
-    int bytes_read=file_read_at(pt->file, file_frame, pt->file_read_bytes, pt->file_offset);
-    if(bytes_read!= (int) pt->file_read_bytes) {
-      lock_release(&file_lock);
-      printf("File read error\n");
-      fFree(file_frame);
-      return false;
-    }*/
+
     file_seek(pt->file, pt->file_offset);
     if (file_read(pt->file, file_frame,pt->file_read_bytes) != (int) pt->file_read_bytes) {
       lock_release(&file_lock);
@@ -197,20 +217,21 @@ bool file_load(struct sup_page_table_entry* pt){
       file_seek(pt->file, 0);
       return false;
     }
-    file_seek(pt->file, 0);
+
 
     lock_release(&file_lock);
-    printf("Loaded setting memory\n");
+    //printf("Loaded setting memory\n");
     memset(file_frame + pt->file_read_bytes, 0, pt->file_zero_bytes);
-    printf("Memory set!\n");
+    //printf("Memory set!\n");
   }
+ // printf("installing page!\n");
   if(!install_page1(pt->user_vaddr,file_frame,pt->is_writable)){
     fFree(file_frame);
-    printf("Failed to install page\n");
+    //printf("DEBUG: Failed to install page\n");
     return false;
   }
   pt->is_loaded=true;
-  printf("loaded and installed at %p\n",pt->user_vaddr);
+  //printf("DEBUG: %p has been successfuly loaded!\n",pt->user_vaddr);
   return true;
 }
 

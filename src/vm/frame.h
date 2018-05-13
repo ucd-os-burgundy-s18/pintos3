@@ -19,8 +19,9 @@ struct frame_entry {
 
 
 };
+void *try_evict(struct frame_entry* victim,enum palloc_flags flag);
 void initialize_frame_table(void);
-struct frame_entry* fAlloc(struct sup_page_table_entry* curPage,int flag);//Allocates a new locked frame
+void* fAlloc(struct sup_page_table_entry* curPage,enum palloc_flags flag);//Allocates a new locked frame
 void fFree(struct frame_entry* curFrame);//Frees the frame
 
 #endif /* vm/frame.h */

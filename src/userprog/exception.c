@@ -127,7 +127,7 @@ page_fault (struct intr_frame *f)
   void *fault_addr;  /* Fault address. */
   bool success=true;
   void* fault_addr_down;
-  printf("AAAAAA\n");
+  //printf("PAGE FAULT CAUGHT!\n");
 
 /* Obtain faulting address, the virtual address that was
    accessed to cause the fault.  It may point to code or to
@@ -137,7 +137,7 @@ page_fault (struct intr_frame *f)
    [IA32-v3a] 5.15 "Interrupt 14--Page Fault Exception
    (#PF)". */
   asm ("movl %%cr2, %0" : "=r" (fault_addr));
-  user = (f->error_code & PF_U) != 0;
+
 
 
 
@@ -148,71 +148,144 @@ page_fault (struct intr_frame *f)
 /* Count page faults. */
   page_fault_cnt++;
   //success=true;
-  printf("esp is %p\n",f->esp);
-  //printf("esp-32 is %p\n",f->esp-32);
-
-  //fault_addr=pg_round_down(fault_addr);
-  printf("Falt_addr is %p\n",fault_addr);
-  //printf("esp down is %p\n",pg_round_down(f->esp));
-  //printf("Falt_addr_down is %p\n",fault_addr);
-  //printf("PHYS_BASE IS %p\n",PHYS_BASE);
-
 
   not_present = (f->error_code & PF_P) == 0;
-  //fault_addr = fault_addr - (void *)(((int)fault_addr) % PGSIZE);
-  //printf("Falt_addr2 is %p\n",fault_addr);
-  if(fault_addr>(fault_addr > ((void *) 0x08048000))){
-    printf("LARGER THEN MAX HEIGHT\n");
-  }
-  if(not_present) {
-    fault_addr = fault_addr - (void *) (((int) fault_addr) % PGSIZE);
-    printf("Falt_addr is now %p\n", fault_addr);
-    success = false;
-    printf("WWWEE\n");
+  write = (f->error_code & PF_W) != 0;
+  user = (f->error_code & PF_U) != 0;
+  /*
+  if (not_present && fault_addr > 0x08048000 && is_user_vaddr(fault_addr)){
     struct sup_page_table_entry *cur_page = get_pte_from_user(fault_addr);
     if (cur_page) {
-      printf("EXISTS\n");
+      //printf("Found cur page\n");
+      //printf("FOUND is now %p\n", fault_addr);
+      page_load(cur_page);
+      cur_page->is_pinned=true;
+      return;
+    }else if((fault_addr >= f->esp-32)){
+      extend_stack(fault_addr);
+      return;
+    }
+
+  }
+  if(!user){
+    PANIC("KERNAL HAD PAGE FAUT\n");
+  }
+  /*
+  printf ("Page fault at %p: %s error %s page in %s context.\n",
+          fault_addr,
+          not_present ? "not present" : "rights violation",
+          write ? "writing" : "reading",
+          user ? "user" : "kernel");
+  *
+  if(pg_round_down(fault_addr)==0){
+    printf("BOGAS\n");
+    thread_current()->exit_status=-1;
+    thread_exit();
+  }
+  //void *fault_addr_rounded=pg_round_down(fault_addr);
+
+  if (fault_addr>(f->esp - 32)||fault_addr==f->esp||fault_addr<(f->esp + 32)) {
+    //printf("Checking stack\n");
+
+    if((fault_addr != NULL)&&is_user_vaddr(fault_addr)){
+      //printf("Expanding stack\n");
+
+      if (extend_stack(fault_addr)) {
+        //printf("Stack extended\n");
+        return;
+      }
+    }
+  }
+
+  printf("Falt_addr is %p\n",fault_addr);
+  printf("FF_addr is   %p\n",(size_t) (PHYS_BASE - (fault_addr)));
+  printf("esp is       %p\n",f->esp);
+  printf("esp-32 is    %p\n",f->esp-32);
+  printf("esp+32 is    %p\n",f->esp+32);
+
+
+  if(fault_addr==NULL||fault_addr>=PHYS_BASE||fault_addr<0x08048000){
+    printf("INVALID ADDR\n");
+    thread_current()->exit_status=-1;
+    thread_exit();
+  }else if(fault_addr<(f->esp+32)){
+    if (!extend_stack(fault_addr)) {
+      printf("BAD STACK\n");
+      thread_current()->exit_status = -1;
+      thread_exit();
+    }
+  }
+  printf("Falt_addr is %p\n",fault_addr);
+  printf("FF_addr is   %p\n",pg_round_up(f->esp));
+  printf("esp is       %p\n",f->esp);
+  printf("esp-32 is    %p\n",f->esp-32);
+  printf("esp+32 is    %p\n",f->esp+32);
+  */
+  if(not_present &&is_user_vaddr(fault_addr)&& (fault_addr != NULL)) {
+
+    struct sup_page_table_entry *cur_page = get_pte_from_user(fault_addr);
+    if (cur_page) {
+      //printf("Found cur page\n");
+      //printf("FOUND is now %p\n", fault_addr);
       if (page_load(cur_page)) {
-        printf("RETURNING\n");
+
         return;
       }
 
     }
-  }
-  if(!user || fault_addr>=f->esp-32){
-    printf("get_user Failing\n");
-    if(extend_stack(fault_addr)){
-      printf("Stack extended\n");
+      //printf("DEBUG: %p\n");
+      if(fault_addr >((void *) 0x08048000)&&(fault_addr != NULL)&&is_user_vaddr(fault_addr)){
+        //printf("SSSSS\n");
+        if (extend_stack(fault_addr)) {
+          //printf("Stack extended\n");
+          return;
+        }
+        printf("BOGASHOLE\n");
+        thread_current()->exit_status=-1;
+        thread_exit();
+      }
+
+
+
+
+
+    //fault_addr = fault_addr - (void *) (((int) fault_addr) % PGSIZE);
+    //printf("Falt_addr is now %p\n", fault_addr);
+    success = false;
+
+
+    printf("Falt_addr is now %p\n", fault_addr);
+    printf("did not fidn it\n");
+    if (extend_stack(fault_addr)) {
+
       return;
     }
-  }
-  if(!user) {
-    printf("SEGFAULT!\n");
-    int value = -1;
-    f->eip=f->eax;
-    f->eax=-1;
-    thread_current()->exit_status=-1;
-    //printf("sanichole");
-    thread_exit();
-    return;
-  }
 
 
-  printf("WHY?\n");
+
+  }
+
+/*
+ printf("DEBUG: Killing thread with fault address\n");
+  printf ("Page fault at %p: %s error %s page in %s context.\n",
+          fault_addr,
+          not_present ? "not present" : "rights violation",
+          write ? "writing" : "reading",
+          user ? "user" : "kernel");
+
+
+
+ // printf("DEBUG: Killing thread with fault address\n");
 
 
 
 /* Determine cause. */
 
-  write = (f->error_code & PF_W) != 0;
+
   thread_current()->exit_status=-1;
   thread_exit();
 
- printf ("Page fault at %p: %s error %s page in %s context.\n",
-         fault_addr,
-         not_present ? "not present" : "rights violation",
-         write ? "writing" : "reading",
-         user ? "user" : "kernel");
+
 
 
 /* To implement virtual memory, delete the rest of the function

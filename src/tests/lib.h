@@ -8,7 +8,7 @@
 
 extern const char *test_name;
 extern bool quiet;
-
+extern int bogas;
 void msg (const char *, ...) PRINTF_FORMAT (1, 2);
 void fail (const char *, ...) PRINTF_FORMAT (1, 2) NO_RETURN;
 

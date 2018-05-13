@@ -7,7 +7,7 @@
 
 const char *test_name;
 bool quiet = false;
-
+bogas=5;
 static void
 vmsg (const char *format, va_list args, const char *suffix) 
 {
