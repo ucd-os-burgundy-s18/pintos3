@@ -269,8 +269,8 @@ the quarter.
 >> in it, too easy or too hard?  Did it take too long or too little time?
 
 This assignment was easily the hardest of the 3 given Pintos assignments.  It definitely was 
-difficult in having to figure out how to build the page and frame tables, and then the mmaps
-and the munmaps.  It took an extrodinary amount of time to complete.
+difficult in having to figure out how to build the page and frame tables. When the due date came, we were unable to have a full
+implementation of mmap and munmap.
 
 >> Did you find that working on a particular part of the assignment gave
 >> you greater insight into some aspect of OS design?
@@ -288,8 +288,9 @@ was the most difficult to to implement.
 >> Do you have any suggestions for the TAs to more effectively assist
 >> students, either for future quarters or the remaining projects?
 
-More readiness to assist when it comes to learning these pintos assignments.
+Bigger hints and more diagrams explaining how the page and frame tables are laid out.  Also, more time would have 
+been optimal.
 
 >> Any other comments?
 
-This was difficult
+This was difficult and more time was definitely needed.
