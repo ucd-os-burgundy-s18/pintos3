@@ -128,12 +128,6 @@ attributes when we need to free up space, and easy pulling into the frames from 
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
-struct lock swap_lock:   The global lock for the swap functions.
-
-struct block *swap_block: Where the pages are read from.
-
-struct bitmap *swap_map: used to determine if the page is occupying part of the block or not.
-
 ---- ALGORITHMS ----
 
 >> B2: When a frame is required but none is free, some frame must be
