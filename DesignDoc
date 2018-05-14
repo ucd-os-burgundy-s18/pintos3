@@ -275,8 +275,8 @@ implementation of mmap and munmap.
 >> Did you find that working on a particular part of the assignment gave
 >> you greater insight into some aspect of OS design?
 
-The Frame table was really interesting when it was fully finished.  Overall, it was nice learning how
-pages are put into frames and then how they are evicted when their use is up.
+The Frame table was really interesting when it was fully finished.  Overall, it was nice learning 
+how the pages map to frame tables.
 
 >> Is there some particular fact or hint we should give students in
 >> future quarters to help them solve the problems?  Conversely, did you
@@ -293,4 +293,5 @@ been optimal.
 
 >> Any other comments?
 
-This was difficult and more time was definitely needed.
+This was difficult and more time was definitely needed.  With busy schedules, it is difficult to near impossible to find time to do 
+assignments of this scope.
