@@ -35,7 +35,7 @@ bool mmap_load(struct sup_page_table_entry* pt);
 bool swap_load(struct sup_page_table_entry* pt);
 bool file_load(struct sup_page_table_entry* pt);
 bool pt_add_file(struct file* file,int32_t offset,uint8_t * upage,uint32_t file_read_bytes,uint32_t file_zero_bytes,bool writible,size_t debug);
-bool pt_add_mmap(struct file* file,int32_t offset,uint8_t * upage,uint32_t file_read_bytes,uint32_t file_zero_bytes);
+bool pt_add_mmap(struct file* file,int32_t offset,uint8_t * upage,uint32_t file_read_bytes,uint32_t file_zero_bytes, bool writeable);
 
 
 

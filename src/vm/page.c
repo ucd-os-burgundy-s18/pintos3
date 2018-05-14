@@ -155,9 +155,43 @@ bool pt_add_file(struct file* file,int32_t offset,uint8_t * upage,uint32_t file_
   //printf("ADDED FILE!\n");
   return true;
 }
-bool pt_add_mmap(struct file* file,int32_t offset,uint8_t * upage,uint32_t file_read_bytes,uint32_t file_zero_bytes){
+
+bool pt_add_mmap(struct file* file,int32_t offset,uint8_t * upage,uint32_t file_read_bytes,uint32_t file_zero_bytes, bool writable){
+ struct sup_page_table_entry *new_page=malloc(sizeof(struct sup_page_table_entry));
+
+  if(!new_page) {
+    return false;
+  }
+  //printf("DEBUG: ADDING UPAGE %p \n",pg_round_down(upage));
+
+  //printf("ID %p\n",debug);
+  ASSERT(upage==pg_round_down(upage));
+  //setFile(new_page,file,offset,upage,file_read_bytes,file_zero_bytes,writible);
+  new_page->debugID=0;
+  new_page->user_vaddr=upage;
+  new_page->file=file;
+  new_page->file_offset=offset;
+  new_page->file_read_bytes=file_read_bytes;
+  new_page->file_zero_bytes=file_zero_bytes;
+  new_page->is_loaded=false;
+  new_page->is_pinned=false;
+  new_page->file_offset=offset;
+  //printf("page parameters set!\n");
+  new_page->is_writable=writable;
+  new_page->for_mmap=true;
+
+  new_page->is_loaded=false;
+  new_page->is_pinned=false;
+  //printf("NEW UPAGE IS %p\n",new_page->user_vaddr);
+  //file_load(new_page);
+  list_push_back (&thread_current()->page_list, &new_page->elem);
+
+  //printf("ADDED FILE!\n");
+  return true;
+
 
 }
+
 
 bool page_load(struct sup_page_table_entry* pt){
   pt->is_pinned=true;

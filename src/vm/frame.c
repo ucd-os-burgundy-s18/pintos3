@@ -92,14 +92,13 @@ void* fAlloc(struct sup_page_table_entry* curPage,enum palloc_flags flag){
     lock_acquire(&global_frame_lock);
     struct list_elem *e=list_begin(&global_frame_table);
     struct frame_entry * evicted_victim=NULL;
-    //printf("DEBUG: palloc failed, attempting to evict!\n");
 
     while(true) {
 
       struct frame_entry *victim = list_entry(e,struct frame_entry,elem);
       if(victim){
         if(victim->owner) {
-          printf("ROTATED\n");
+        
           evicted_victim = try_evict(victim, flag);
         }
       }
