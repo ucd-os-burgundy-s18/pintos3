@@ -17,6 +17,8 @@ Nicolas Wilhoit <nicolas.wilhoit@ucdenver.edu>
 >> If you have any preliminary comments on your submission, notes for the
 >> TAs, or extra credit, please give them here.
 
+Thus far, we are passing the page tests, the frame tests, the regression tests
+
 The VM Pintos design document outlies the process, and questions that are required to be answered 
 through the development of Pintos VM
 
